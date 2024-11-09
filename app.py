@@ -6,6 +6,25 @@ import base64
 from typing import Tuple, Dict, List
 import gc
 
+# 植生指数の定義
+ALGORITHMS = {
+    "INT": ("Intensity", lambda r, g, b: (r + g + b) / 3),
+    "NRI": ("Normalized Red Index", lambda r, g, b: r),
+    "NGI": ("Normalized Green Index", lambda r, g, b: g),
+    "NBI": ("Normalized Blue Index", lambda r, g, b: b),
+    "RGRI": ("Red Green Ratio Index", lambda r, g, b: np.divide(r, g, out=np.zeros_like(r), where=g!=0)),
+    "ExR": ("Excess Red Index", lambda r, g, b: 1.4 * r - g),
+    "ExG": ("Excess Green Index", lambda r, g, b: 2 * g - r - b),
+    "ExB": ("Excess Blue Index", lambda r, g, b: 1.4 * b - g),
+    "ExGR": ("Excess Green minus Red Index", lambda r, g, b: (2 * g - r - b) - (1.4 * r - g)),
+    "GRVI": ("Green Red Vegetation Index", lambda r, g, b: np.divide(g - r, g + r, out=np.zeros_like(r), where=(g + r)!=0)),
+    "VARI": ("Visible Atmospherically Resistant Index", lambda r, g, b: np.divide(g - r, g + r - b, out=np.zeros_like(r), where=(g + r - b)!=0)),
+    "GLI": ("Green Leaf Index", lambda r, g, b: np.divide(2 * g - r - b, 2 * g + r + b, out=np.zeros_like(r), where=(2 * g + r + b)!=0)),
+    "MGRVI": ("Modified Green Red Vegetation Index", lambda r, g, b: np.divide(g*g - r*r, g*g + r*r, out=np.zeros_like(r), where=(g*g + r*r)!=0)),
+    "RGBVI": ("Red Green Blue Vegetation Index", lambda r, g, b: np.divide(g*g - r*b, g*g + r*b, out=np.zeros_like(r), where=(g*g + r*b)!=0)),
+    "VEG": ("Vegetativen", lambda r, g, b: np.divide(g, np.power(r, 0.667) * np.power(b, 0.333), out=np.zeros_like(r), where=(r > 0) & (b > 0)))
+}
+
 def resize_if_needed(image: np.ndarray, max_size: int = 1024) -> np.ndarray:
     """大きな画像をリサイズして処理を軽くする"""
     h, w = image.shape[:2]
@@ -34,18 +53,15 @@ def process_single_image(
     del image_float
     gc.collect()
     
-    # ExG計算
+    # 正規化
     total = r + g + b
     nr = np.divide(r, total, out=np.zeros_like(r), where=total!=0)
     ng = np.divide(g, total, out=np.zeros_like(g), where=total!=0)
     nb = np.divide(b, total, out=np.zeros_like(b), where=total!=0)
+    
+    # ExG計算と二値化
     exg = 2 * ng - nr - nb
     
-    # メモリ解放
-    del nr, nb
-    gc.collect()
-    
-    # 閾値処理
     if threshold_method == "otsu":
         exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
         thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -55,180 +71,166 @@ def process_single_image(
         threshold = exg_threshold
     
     binary_mask = (exg >= threshold).astype(np.uint8) * 255
-    del exg
-    gc.collect()
     
-    # 植生指数の計算（メモリ効率化）
+    # 植生指数の計算
     indices_result = {"vegetation": {}, "whole": {}}
     veg_pixels = np.count_nonzero(binary_mask)
     total_pixels = binary_mask.size
     mask_bool = binary_mask > 0
     
+    # 選択された指数の計算（ベクトル化処理）
     for index_name in selected_indices:
-        if index_name == "INT":
-            value = (r + g + b) / 3
-        elif index_name == "ExG":
-            value = 2 * ng - r - b
-        elif index_name == "GRVI":
-            value = np.divide(g - r, g + r, out=np.zeros_like(g), where=(g + r)!=0)
-        else:
-            continue  # 必要な指数のみ計算
-            
-        indices_result["whole"][index_name] = float(np.mean(value))
-        if veg_pixels > 0:
-            indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
-        else:
-            indices_result["vegetation"][index_name] = 0.0
-        
-        del value
-        gc.collect()
+        if index_name in ALGORITHMS:
+            value = ALGORITHMS[index_name][1](nr, ng, nb)
+            indices_result["whole"][index_name] = float(np.mean(value))
+            if veg_pixels > 0:
+                indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
+            else:
+                indices_result["vegetation"][index_name] = 0.0
+            del value
     
     return binary_mask, veg_pixels, total_pixels, indices_result
-
-def batch_process_images(
-    files: List,
-    threshold_method: str,
-    exg_threshold: float,
-    selected_indices: List[str],
-    progress_bar,
-    progress_text
-) -> List[Dict]:
-    """バッチ処理（メモリ効率化）"""
-    results = []
-    total_files = len(files)
-    
-    for i, file in enumerate(files, 1):
-        try:
-            # 進捗更新
-            progress = i / total_files
-            progress_bar.progress(progress)
-            progress_text.text(f"処理中: {file.name} ({i}/{total_files}, {progress:.1%})")
-            
-            # 画像読み込み
-            file_bytes = np.frombuffer(file.read(), np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            # 画像処理
-            binary_mask, veg_pixels, total_pixels, indices = process_single_image(
-                image, threshold_method, exg_threshold, selected_indices
-            )
-            
-            # 結果保存
-            result = {
-                'filename': file.name,
-                'vegetationCoverage': (veg_pixels / total_pixels) * 100,
-                'vegetationPixels': veg_pixels,
-                'totalPixels': total_pixels,
-                'thresholdMethod': threshold_method,
-                'threshold': exg_threshold if threshold_method == 'exg' else 'auto'
-            }
-            
-            # 指数値の追加
-            for key in selected_indices:
-                if key in indices['vegetation']:
-                    result[f'{key}_vegetation'] = indices['vegetation'][key]
-                    result[f'{key}_whole'] = indices['whole'][key]
-            
-            results.append(result)
-            
-            # メモリ解放
-            del image, binary_mask
-            gc.collect()
-            
-        except Exception as e:
-            st.error(f"Error processing {file.name}: {str(e)}")
-            continue
-    
-    return results
 
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
     
-    # 単一画像処理
-    st.header("単一画像解析")
-    uploaded_file = st.file_uploader("画像をアップロード", type=["png", "jpg", "jpeg"])
+    st.title("植生解析アプリケーション")
     
-    # 最小限の設定オプション
-    threshold_method = st.radio(
-        "2値化方法",
-        ["otsu", "exg"],
-        format_func=lambda x: "大津の方法（自動）" if x == "otsu" else "ExGによる閾値指定"
-    )
+    # サイドバーでの設定
+    with st.sidebar:
+        st.header("解析設定")
+        
+        # 2値化方法の選択
+        threshold_method = st.radio(
+            "2値化方法",
+            ["otsu", "exg"],
+            format_func=lambda x: "大津の方法（自動）" if x == "otsu" else "ExGによる閾値指定"
+        )
+        
+        if threshold_method == "exg":
+            exg_threshold = st.slider("ExG閾値", -1.0, 1.0, 0.2, 0.01)
+        else:
+            exg_threshold = 0.2
+        
+        # 植生指数の選択
+        st.subheader("使用する植生指数")
+        selected_indices = []
+        indices_columns = st.columns(2)
+        for i, (key, (name, _)) in enumerate(ALGORITHMS.items()):
+            with indices_columns[i % 2]:
+                if st.checkbox(f"{key} - {name}", value=key in ["ExG", "GRVI"]):
+                    selected_indices.append(key)
     
-    exg_threshold = 0.2
-    if threshold_method == "exg":
-        exg_threshold = st.slider("ExG閾値", -1.0, 1.0, 0.2, 0.01)
+    # メインコンテンツ
+    tab1, tab2 = st.tabs(["単一画像解析", "バッチ処理"])
     
-    # 必要な指数のみ選択
-    selected_indices = ["INT", "ExG", "GRVI"]  # 主要な指数のみ
-    
-    if uploaded_file:
-        try:
-            # 画像処理
-            file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            binary_mask, veg_pixels, total_pixels, indices = process_single_image(
-                image, threshold_method, exg_threshold, selected_indices
-            )
-            
-            # 結果表示
-            col1, col2 = st.columns(2)
-            with col1:
-                st.image(image, caption="元画像", use_column_width=True)
-            with col2:
-                st.image(binary_mask, caption="処理結果", use_column_width=True)
-            
-            # 解析結果
-            coverage = (veg_pixels / total_pixels) * 100
-            st.metric("植生被覆率", f"{coverage:.2f}%")
-            
-            # 指数結果
-            for key in selected_indices:
-                if key in indices['vegetation']:
-                    st.write(f"{key}: {indices['vegetation'][key]:.4f}")
-            
-        except Exception as e:
-            st.error(f"エラーが発生しました: {str(e)}")
-    
-    # バッチ処理
-    st.header("バッチ処理")
-    uploaded_files = st.file_uploader(
-        "複数の画像をアップロード",
-        type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True
-    )
-    
-    if uploaded_files:
-        if st.button("バッチ処理開始"):
-            progress_container = st.container()
-            progress_bar = progress_container.progress(0)
-            progress_text = progress_container.empty()
-            
-            results = batch_process_images(
-                uploaded_files,
-                threshold_method,
-                exg_threshold,
-                selected_indices,
-                progress_bar,
-                progress_text
-            )
-            
-            if results:
-                # 結果表示
-                df = pd.DataFrame(results)
-                st.dataframe(df)
+    with tab1:
+        uploaded_file = st.file_uploader("画像をアップロード", type=["png", "jpg", "jpeg"])
+        
+        if uploaded_file:
+            try:
+                file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
+                image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                # CSVダウンロード
-                csv = df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    "結果をダウンロード",
-                    csv,
-                    "vegetation_analysis_results.csv",
-                    "text/csv"
+                binary_mask, veg_pixels, total_pixels, indices = process_single_image(
+                    image, threshold_method, exg_threshold, selected_indices
                 )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(image, caption="元画像")
+                with col2:
+                    st.image(binary_mask, caption="植生抽出結果")
+                
+                # 結果表示
+                coverage = (veg_pixels / total_pixels) * 100
+                
+                metrics_cols = st.columns(3)
+                with metrics_cols[0]:
+                    st.metric("植生被覆率", f"{coverage:.2f}%")
+                with metrics_cols[1]:
+                    st.metric("植生ピクセル数", f"{veg_pixels:,}")
+                with metrics_cols[2]:
+                    st.metric("総ピクセル数", f"{total_pixels:,}")
+                
+                if indices["vegetation"]:
+                    st.subheader("植生指数の計算結果")
+                    index_cols = st.columns(2)
+                    with index_cols[0]:
+                        st.write("植生部分の指数値:")
+                        for key in selected_indices:
+                            st.write(f"{ALGORITHMS[key][0]}: {indices['vegetation'][key]:.4f}")
+                    with index_cols[1]:
+                        st.write("画像全体の指数値:")
+                        for key in selected_indices:
+                            st.write(f"{ALGORITHMS[key][0]}: {indices['whole'][key]:.4f}")
+            
+            except Exception as e:
+                st.error(f"エラーが発生しました: {str(e)}")
+    
+    with tab2:
+        uploaded_files = st.file_uploader(
+            "複数の画像をアップロード",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files and len(selected_indices) > 0:
+            if st.button("バッチ処理開始", type="primary"):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                results = []
+                total_files = len(uploaded_files)
+                
+                for i, file in enumerate(uploaded_files, 1):
+                    try:
+                        progress = i / total_files
+                        progress_bar.progress(progress)
+                        status_text.text(f"処理中: {file.name} ({i}/{total_files}, {progress:.1%})")
+                        
+                        file_bytes = np.frombuffer(file.read(), np.uint8)
+                        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                        
+                        binary_mask, veg_pixels, total_pixels, indices = process_single_image(
+                            image, threshold_method, exg_threshold, selected_indices
+                        )
+                        
+                        result = {
+                            'ファイル名': file.name,
+                            '植生被覆率(%)': (veg_pixels / total_pixels) * 100,
+                            '植生ピクセル数': veg_pixels,
+                            '総ピクセル数': total_pixels,
+                            '2値化方法': "大津の方法" if threshold_method == "otsu" else "ExG閾値指定",
+                            '閾値': "自動" if threshold_method == "otsu" else str(exg_threshold)
+                        }
+                        
+                        for key in selected_indices:
+                            result[f'{ALGORITHMS[key][0]}(植生部)'] = indices['vegetation'][key]
+                            result[f'{ALGORITHMS[key][0]}(全体)'] = indices['whole'][key]
+                        
+                        results.append(result)
+                        
+                    except Exception as e:
+                        st.error(f"Error processing {file.name}: {str(e)}")
+                        continue
+                
+                if results:
+                    status_text.text("処理完了!")
+                    
+                    df = pd.DataFrame(results)
+                    st.dataframe(df)
+                    
+                    csv = df.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        "CSVファイルをダウンロード",
+                        csv,
+                        "vegetation_analysis_results.csv",
+                        "text/csv",
+                        key='download-csv'
+                    )
 
 if __name__ == "__main__":
     main()
