@@ -6,6 +6,7 @@ from PIL import Image
 import io
 import base64
 from functools import lru_cache
+from datetime import datetime  # ファイル名用のタイムスタンプ
 
 # キャッシュを使用して頻繁に呼び出される関数を最適化
 @st.cache_data
@@ -337,14 +338,25 @@ def main():
     # バッチ処理セクション
     st.header(t['batchProcessing']['title'])
     uploaded_files = st.file_uploader("", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-    
+
     if uploaded_files:
         if st.button(t['batchProcessing']['start']):
-            progress_bar = st.progress(0)
+            # プログレスバーと進捗テキストを表示するコンテナを作成
+            progress_container = st.container()
+            progress_bar = progress_container.progress(0)
+            progress_text = progress_container.empty()
+            
             results = []
+            total_files = len(uploaded_files)
             
             for i, file in enumerate(uploaded_files):
                 try:
+                    # 進捗率の計算と表示
+                    progress = (i + 1) / total_files
+                    progress_bar.progress(progress)
+                    progress_text.text(f"処理中: {file.name} ({i + 1}/{total_files}, {progress * 100:.1f}%)")
+                    
+                    # 画像の読み込みと処理
                     file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
                     image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -372,25 +384,33 @@ def main():
                             result[f'{key}_whole'] = indices['whole'][key]
                     
                     results.append(result)
-                    progress_bar.progress((i + 1) / len(uploaded_files))
-                
+                    
                 except Exception as e:
                     st.error(f"Error processing {file.name}: {str(e)}")
             
-            # 結果をDataFrameに変換
-            df = pd.DataFrame(results)
-            
-            # CSVダウンロードリンクの作成
-            csv = df.to_csv(index=False)
-            b64 = base64.b64encode(csv.encode()).decode()
-            href = f'data:text/csv;base64,{b64}'
-            
-            # ダウンロードボタンの表示
-            download_button_str = f'<a href="{href}" download="vegetation_analysis_results.csv"><button>{t["download"]}</button></a>'
-            st.markdown(download_button_str, unsafe_allow_html=True)
+            # 処理完了の表示
+            progress_text.text("処理完了!")
             
             # 結果の表示
-            st.dataframe(df)
+            if results:
+                st.success(f"処理完了: {len(results)}/{total_files} ファイルを処理しました")
+                
+                # 結果をDataFrameに変換
+                df = pd.DataFrame(results)
+                
+                # CSVダウンロードボタンの作成
+                csv = df.to_csv(index=False).encode('utf-8-sig')  # UTF-8 with BOM for Excel
+                st.download_button(
+                    label=t["download"],
+                    data=csv,
+                    file_name=f"vegetation_analysis_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+                
+                # 結果の表示
+                st.dataframe(df)
+            else:
+                st.warning("処理可能なファイルがありませんでした")
 
 if __name__ == "__main__":
     main()
