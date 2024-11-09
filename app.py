@@ -26,6 +26,9 @@ TRANSLATIONS = {
             'exg': "ExGによる閾値指定"
         },
         'threshold': "ExG閾値",
+        'algorithm': {
+            'label': "植生指数"
+        },
         'singleAnalysis': "単一画像解析",
         'batchProcessing': {
             'title': "バッチ処理",
@@ -72,6 +75,9 @@ TRANSLATIONS = {
             'exg': "ExG Threshold"
         },
         'threshold': "ExG Threshold",
+        'algorithm': {
+            'label': "Vegetation Indices"
+        },
         'singleAnalysis': "Single Image Analysis",
         'batchProcessing': {
             'title': "Batch Processing",
