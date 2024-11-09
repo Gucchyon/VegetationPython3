@@ -4,19 +4,18 @@ import cv2
 import pandas as pd
 from PIL import Image
 import io
-import tempfile
-from pathlib import Path
-import os
 import base64
+from functools import lru_cache
 
-# アプリケーションの状態を初期化
+# キャッシュを使用して頻繁に呼び出される関数を最適化
+@st.cache_data
 def init_session_state():
     if 'language' not in st.session_state:
         st.session_state.language = 'ja'
     if 'batch_results' not in st.session_state:
         st.session_state.batch_results = []
 
-# 翻訳辞書
+# 翻訳辞書は変更なし
 TRANSLATIONS = {
     'ja': {
         'title': "植生の解析",
@@ -118,27 +117,51 @@ TRANSLATIONS = {
     }
 }
 
-# 植生指数の計算アルゴリズム
-ALGORITHMS = {
-    "INT": lambda r, g, b: (r + g + b) / 3,
-    "NRI": lambda r, g, b: r / (r + g + b) if (r + g + b) > 0 else 0,
-    "NGI": lambda r, g, b: g / (r + g + b) if (r + g + b) > 0 else 0,
-    "NBI": lambda r, g, b: b / (r + g + b) if (r + g + b) > 0 else 0,
-    "RGRI": lambda r, g, b: r / g if g > 0 else 0,
-    "ExR": lambda r, g, b: 1.4 * r - g,
-    "ExG": lambda r, g, b: 2 * g - r - b,
-    "ExB": lambda r, g, b: 1.4 * b - g,
-    "ExGR": lambda r, g, b: (2 * g - r - b) - (1.4 * r - g),
-    "GRVI": lambda r, g, b: (g - r)/(g + r) if (g + r) > 0 else 0,
-    "VARI": lambda r, g, b: (g - r)/(g + r - b) if (g + r - b) != 0 else 0,
-    "GLI": lambda r, g, b: (2 * g - r - b)/(2 * g + r + b) if (2 * g + r + b) != 0 else 0,
-    "MGRVI": lambda r, g, b: (g*g - r*r)/(g*g + r*r) if (g*g + r*r) != 0 else 0,
-    "RGBVI": lambda r, g, b: (g*g - r*b)/(g*g + r*b) if (g*g + r*b) != 0 else 0,
-    "VEG": lambda r, g, b: g/(pow(r, 0.667) * pow(b, 0.333)) if (r > 0 and b > 0) else 0
-}
+# 植生指数の計算をベクトル化
+class VegetationIndices:
+    @staticmethod
+    @np.vectorize
+    def safe_divide(a, b):
+        return np.divide(a, b, out=np.zeros_like(a, dtype=float), where=b!=0)
+    
+    @staticmethod
+    def calculate_indices_vectorized(r: np.ndarray, g: np.ndarray, b: np.ndarray) -> dict:
+        total = r + g + b
+        nr = VegetationIndices.safe_divide(r, total)
+        ng = VegetationIndices.safe_divide(g, total)
+        nb = VegetationIndices.safe_divide(b, total)
+        
+        indices = {}
+        indices["INT"] = (r + g + b) / 3
+        indices["NRI"] = nr
+        indices["NGI"] = ng
+        indices["NBI"] = nb
+        indices["RGRI"] = VegetationIndices.safe_divide(r, g)
+        indices["ExR"] = 1.4 * r - g
+        indices["ExG"] = 2 * g - r - b
+        indices["ExB"] = 1.4 * b - g
+        indices["ExGR"] = (2 * g - r - b) - (1.4 * r - g)
+        indices["GRVI"] = VegetationIndices.safe_divide(g - r, g + r)
+        indices["VARI"] = VegetationIndices.safe_divide(g - r, g + r - b)
+        indices["GLI"] = VegetationIndices.safe_divide(2 * g - r - b, 2 * g + r + b)
+        
+        g2 = g * g
+        r2 = r * r
+        rb = r * b
+        indices["MGRVI"] = VegetationIndices.safe_divide(g2 - r2, g2 + r2)
+        indices["RGBVI"] = VegetationIndices.safe_divide(g2 - rb, g2 + rb)
+        
+        # VEGは特殊な計算が必要なため個別に処理
+        mask = (r > 0) & (b > 0)
+        veg = np.zeros_like(r)
+        veg[mask] = g[mask] / (np.power(r[mask], 0.667) * np.power(b[mask], 0.333))
+        indices["VEG"] = veg
+        
+        return indices
 
-def calculate_otsu_threshold(image):
-    """大津の方法による閾値計算"""
+@st.cache_data
+def calculate_otsu_threshold(image: np.ndarray) -> float:
+    """大津の方法による閾値計算（高速化）"""
     b, g, r = cv2.split(image)
     total = r.astype(float) + g.astype(float) + b.astype(float)
     nr = np.divide(r, total, out=np.zeros_like(r, dtype=float), where=total!=0)
@@ -151,64 +174,52 @@ def calculate_otsu_threshold(image):
     
     return (thresh / 127.5) - 1
 
-def process_image(image, threshold_method, exg_threshold, selected_indices):
-    """画像処理のメイン関数"""
+@st.cache_data
+def process_image(image: np.ndarray, threshold_method: str, exg_threshold: float, selected_indices: list) -> tuple:
+    """画像処理のメイン関数（最適化版）"""
+    # グレースケール画像の処理
     if len(image.shape) == 2:
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     
-    # RGB値の正規化
-    b, g, r = cv2.split(image)
-    total = r.astype(float) + g.astype(float) + b.astype(float)
-    nr = np.divide(r, total, out=np.zeros_like(r, dtype=float), where=total!=0)
-    ng = np.divide(g, total, out=np.zeros_like(g, dtype=float), where=total!=0)
-    nb = np.divide(b, total, out=np.zeros_like(b, dtype=float), where=total!=0)
+    # 画像の正規化（一度に実行）
+    image_float = image.astype(np.float32) / 255.0
+    b, g, r = cv2.split(image_float)
     
-    # ExGの計算
+    # ExGの計算（ベクトル化）
+    total = r + g + b
+    nr = np.divide(r, total, out=np.zeros_like(r), where=total!=0)
+    ng = np.divide(g, total, out=np.zeros_like(g), where=total!=0)
+    nb = np.divide(b, total, out=np.zeros_like(b), where=total!=0)
     exg = 2 * ng - nr - nb
     
-    # 閾値の決定
-    if threshold_method == "otsu":
-        threshold = calculate_otsu_threshold(image)
-    else:
-        threshold = exg_threshold
-    
-    # 二値化マスク作成
+    # 閾値処理
+    threshold = calculate_otsu_threshold(image) if threshold_method == "otsu" else exg_threshold
     binary_mask = (exg >= threshold).astype(np.uint8) * 255
     
-    # 植生指数の計算
-    indices_result = {"vegetation": {}, "whole": {}}
+    # 植生指数の計算（ベクトル化）
+    indices = VegetationIndices.calculate_indices_vectorized(r, g, b)
+    
+    # 結果の集計
     veg_pixels = np.count_nonzero(binary_mask)
     total_pixels = binary_mask.size
     
-    # 各ピクセルの処理
-    for y in range(image.shape[0]):
-        for x in range(image.shape[1]):
-            r_val, g_val, b_val = image[y, x] / 255.0
-            
-            # 選択された指数の計算
-            for index_name in selected_indices:
-                if index_name in ALGORITHMS:
-                    value = ALGORITHMS[index_name](r_val, g_val, b_val)
-                    indices_result["whole"][index_name] = indices_result["whole"].get(index_name, 0) + value
-                    if binary_mask[y, x] > 0:
-                        indices_result["vegetation"][index_name] = indices_result["vegetation"].get(index_name, 0) + value
+    # 選択された指数の処理
+    indices_result = {"vegetation": {}, "whole": {}}
+    mask_bool = binary_mask > 0
     
-    # 平均値の計算
-    for key in indices_result["whole"]:
-        indices_result["whole"][key] /= total_pixels
-        if veg_pixels > 0:
-            indices_result["vegetation"][key] /= veg_pixels
-        else:
-            indices_result["vegetation"][key] = 0
+    for index_name in selected_indices:
+        index_values = indices[index_name]
+        indices_result["whole"][index_name] = np.mean(index_values)
+        indices_result["vegetation"][index_name] = np.mean(index_values[mask_bool]) if veg_pixels > 0 else 0
     
     return binary_mask, veg_pixels, total_pixels, indices_result
 
-def create_csv_download_link(df):
-    """CSVダウンロードリンクの作成"""
+@st.cache_data
+def create_csv_download_link(df: pd.DataFrame) -> str:
+    """CSVダウンロードリンクの作成（キャッシュ対応）"""
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()
-    href = f'data:text/csv;base64,{b64}'
-    return href
+    return f'data:text/csv;base64,{b64}'
 
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
