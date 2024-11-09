@@ -14,7 +14,24 @@ def init_session_state():
         st.session_state.language = 'ja'
     if 'batch_results' not in st.session_state:
         st.session_state.batch_results = []
-
+# 植生指数の計算アルゴリズム定義
+ALGORITHMS = {
+    "INT": "Intensity",
+    "NRI": "Normalized Red Index",
+    "NGI": "Normalized Green Index",
+    "NBI": "Normalized Blue Index",
+    "RGRI": "Red Green Ratio Index",
+    "ExR": "Excess Red Index",
+    "ExG": "Excess Green Index",
+    "ExB": "Excess Blue Index",
+    "ExGR": "Excess Green minus Red Index",
+    "GRVI": "Green Red Vegetation Index",
+    "VARI": "Visible Atmospherically Resistant Index",
+    "GLI": "Green Leaf Index",
+    "MGRVI": "Modified Green Red Vegetation Index",
+    "RGBVI": "Red Green Blue Vegetation Index",
+    "VEG": "Vegetativen"
+}
 # 翻訳辞書は変更なし
 TRANSLATIONS = {
     'ja': {
