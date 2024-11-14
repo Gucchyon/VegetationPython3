@@ -349,12 +349,6 @@ def main():
         get_text("single_image", lang),
         get_text("batch_processing", lang)
     ])
-    
-    with tab1:
-        uploaded_file = st.file_uploader(
-            get_text("upload_image", lang),
-            type=["png", "jpg", "jpeg"]
-        )
         
     with tab1:
         uploaded_file = st.file_uploader(
