@@ -238,7 +238,7 @@ def process_single_image(
     exg_threshold: float,
     selected_indices: List[str]
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, int], Dict[str, Dict], Dict[str, float]]:
-    # 画像のリサイズ
+    # リサイズ
     image = resize_if_needed(image)
     
     # float32で計算
@@ -266,68 +266,51 @@ def process_single_image(
         threshold = exg_threshold
     
     binary_mask = (exg >= threshold).astype(np.uint8) * 255
-    inner_mask = cv2.erode(binary_mask, np.ones((3,3), np.uint8), iterations=1)
     edges = cv2.Canny(binary_mask, 100, 200)
     
-    # 各モード用のマスク処理
+    # マスク処理
     mask_bool = binary_mask > 0
-    inner_bool = inner_mask > 0
     
     # マスクされた値の計算
     r_masked = r * mask_bool
     g_masked = g * mask_bool
     b_masked = b * mask_bool
     
-    r_inner = r * inner_bool
-    g_inner = g * inner_bool
-    b_inner = b * inner_bool
-    
-    # 各モード用の正規化値
+    # マスク領域用の正規化値
     nr_masked = np.divide(r_masked, total_raw, out=np.zeros_like(r), where=total_raw!=0)
     ng_masked = np.divide(g_masked, total_raw, out=np.zeros_like(g), where=total_raw!=0)
     nb_masked = np.divide(b_masked, total_raw, out=np.zeros_like(b), where=total_raw!=0)
     
-    nr_inner = np.divide(r_inner, total_raw, out=np.zeros_like(r), where=total_raw!=0)
-    ng_inner = np.divide(g_inner, total_raw, out=np.zeros_like(g), where=total_raw!=0)
-    nb_inner = np.divide(b_inner, total_raw, out=np.zeros_like(b), where=total_raw!=0)
-    
-    # 画像の準備
+    # マスク画像の作成
     masked_image = image.copy()
     masked_image[binary_mask == 0] = 0
-    inner_image = image.copy()
-    inner_image[inner_mask == 0] = 0
     
     images = {
         "binary": binary_mask,
         "masked": masked_image,
-        "inner": inner_image,
         "edges": edges
     }
     
     # ピクセル数の計算
     pixels = {
         "veg": np.count_nonzero(binary_mask),
-        "inner": np.count_nonzero(inner_mask),
         "total": binary_mask.size,
         "perimeter": np.count_nonzero(edges)
     }
     
-    # 各モードでの指標計算
-    indices_result = {"raw": {}, "masked": {}, "inner": {}}
+    # 指標計算
+    indices_result = {"raw": {}, "masked": {}}
     for index_name in selected_indices:
         if index_name == "INT":
             raw_value = ALGORITHMS[index_name][1](r, g, b)
             masked_value = ALGORITHMS[index_name][1](r_masked, g_masked, b_masked)
-            inner_value = ALGORITHMS[index_name][1](r_inner, g_inner, b_inner)
         else:
             raw_value = ALGORITHMS[index_name][1](nr_raw, ng_raw, nb_raw)
             masked_value = ALGORITHMS[index_name][1](nr_masked, ng_masked, nb_masked)
-            inner_value = ALGORITHMS[index_name][1](nr_inner, ng_inner, nb_inner)
         
         indices_result["raw"][index_name] = float(np.mean(raw_value))
         indices_result["masked"][index_name] = float(np.mean(raw_value[mask_bool])) if pixels["veg"] > 0 else 0.0
-        indices_result["inner"][index_name] = float(np.mean(raw_value[inner_bool])) if pixels["inner"] > 0 else 0.0
-        del raw_value, masked_value, inner_value
+        del raw_value, masked_value
     
     # PAR計算
     par = {
@@ -336,10 +319,17 @@ def process_single_image(
     
     return images, pixels, indices_result, par
 
-def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
+def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang, progress_bar=None, status_text=None):
     results = []
-    for file in uploaded_files:
+    total_files = len(uploaded_files)
+    
+    for i, file in enumerate(uploaded_files, 1):
         try:
+            if progress_bar is not None:
+                progress = i / total_files
+                progress_bar.progress(progress)
+                status_text.text(f"{get_text('processing', lang)} {file.name} ({i}/{total_files})")
+            
             file_bytes = np.frombuffer(file.read(), np.uint8)
             image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -353,18 +343,16 @@ def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indi
                 get_text("file_name", lang): file.name,
                 get_text("coverage_rate_percent", lang): (pixels['veg'] / pixels['total']) * 100,
                 get_text("veg_pixels", lang): pixels['veg'],
-                "Inner Pixels": pixels['inner'],
                 get_text("total_pixels", lang): pixels['total'],
                 "PAR": par['value'],
                 get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
                 get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
             }
             
-            # 各モードの指標値
+            # 指標値
             for key in selected_indices:
                 result[f'{ALGORITHMS[key][0]} (Raw)'] = indices['raw'][key]
                 result[f'{ALGORITHMS[key][0]} (Masked)'] = indices['masked'][key]
-                result[f'{ALGORITHMS[key][0]} (Inner)'] = indices['inner'][key]
             
             results.append(result)
             
@@ -438,30 +426,26 @@ def main():
                     image, threshold_method, exg_threshold, selected_indices
                 )
                 
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     st.image(image, caption=get_text("original_image", lang))
                 with col2:
                     st.image(images["masked"], caption=get_text("vegetation_result", lang))
                 with col3:
-                    st.image(images["inner"], caption="Inner Area Result")
-                with col4:
                     st.image(images["edges"], caption="Edge Detection Result")
                 
-                metrics_cols = st.columns(4)
+                metrics_cols = st.columns(3)
                 with metrics_cols[0]:
                     st.metric(get_text("coverage_rate", lang), 
                              f"{(pixels['veg'] / pixels['total']) * 100:.2f}%")
                 with metrics_cols[1]:
                     st.metric(get_text("veg_pixels", lang), f"{pixels['veg']:,}")
                 with metrics_cols[2]:
-                    st.metric("Inner Pixels", f"{pixels['inner']:,}")
-                with metrics_cols[3]:
                     st.metric("PAR", f"{par['value']:.4f}")
                 
                 if indices:
                     st.subheader(get_text("index_results", lang))
-                    mode_cols = st.columns(3)
+                    mode_cols = st.columns(2)
                     with mode_cols[0]:
                         st.write("Raw Image Values:")
                         for key in selected_indices:
@@ -470,13 +454,9 @@ def main():
                         st.write("Masked Area Values:")
                         for key in selected_indices:
                             st.write(f"{ALGORITHMS[key][0]}: {indices['masked'][key]:.4f}")
-                    with mode_cols[2]:
-                        st.write("Inner Area Values:")
-                        for key in selected_indices:
-                            st.write(f"{ALGORITHMS[key][0]}: {indices['inner'][key]:.4f}")
             
             except Exception as e:
-                st.error(f"{get_text('error_occurred', lang)} {str(e)}")    
+                st.error(f"{get_text('error_occurred', lang)} {str(e)}")
 
     with tab2:
         uploaded_files = st.file_uploader(
