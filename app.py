@@ -275,11 +275,16 @@ def process_single_image(
     total_pixels = binary_mask.size
     mask_bool = binary_mask > 0
     
-    # 選択された指数の計算（ベクトル化処理）
+    basic_indices = ["INT", "NRI", "NGI", "NBI"]
+    
     for index_name in selected_indices:
         if index_name in ALGORITHMS:
-            value = ALGORITHMS[index_name][1](nr, ng, nb)
-            indices_result["whole"][index_name] = float(np.mean(value))
+            if index_name in basic_indices:
+                # 基本指数は正規化前の値を使用
+                value = ALGORITHMS[index_name][1](r, g, b)
+            else:
+                # その他の指数は正規化した値を使用
+                value = ALGORITHMS[index_name][1](nr, ng, nb)
             if veg_pixels > 0:
                 indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
             else:
