@@ -359,7 +359,8 @@ def main():
     with tab1:
         uploaded_file = st.file_uploader(
             get_text("upload_image", lang),
-            type=["png", "jpg", "jpeg"]
+            type=["png", "jpg", "jpeg"],
+            key="single_image_uploader"  # キーを追加
         )
         
         if uploaded_file:
@@ -382,7 +383,7 @@ def main():
                 
                 coverage = (veg_pixels / total_pixels) * 100
                 
-                metrics_cols = st.columns(4)  # 4列に変更
+                metrics_cols = st.columns(4)
                 with metrics_cols[0]:
                     st.metric(get_text("coverage_rate", lang), f"{coverage:.2f}%")
                 with metrics_cols[1]:
@@ -391,7 +392,7 @@ def main():
                     st.metric(get_text("total_pixels", lang), f"{total_pixels:,}")
                 with metrics_cols[3]:
                     st.metric("PAR (Perimeter Area Ratio)", f"{par:.4f}")
-                
+
                 if indices["vegetation"]:
                     st.subheader(get_text("index_results", lang))
                     index_cols = st.columns(2)
@@ -411,7 +412,8 @@ def main():
         uploaded_files = st.file_uploader(
             get_text("upload_multiple", lang),
             type=["png", "jpg", "jpeg"],
-            accept_multiple_files=True
+            accept_multiple_files=True,
+            key="batch_image_uploader"  # キーを追加
         )
         
         if uploaded_files and len(selected_indices) > 0:
