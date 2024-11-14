@@ -336,6 +336,44 @@ def process_single_image(
     
     return images, pixels, indices_result, par
 
+def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
+    results = []
+    for file in uploaded_files:
+        try:
+            file_bytes = np.frombuffer(file.read(), np.uint8)
+            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            images, pixels, indices, par = process_single_image(
+                image, threshold_method, exg_threshold, selected_indices
+            )
+            
+            # 基本情報
+            result = {
+                get_text("file_name", lang): file.name,
+                get_text("coverage_rate_percent", lang): (pixels['veg'] / pixels['total']) * 100,
+                get_text("veg_pixels", lang): pixels['veg'],
+                "Inner Pixels": pixels['inner'],
+                get_text("total_pixels", lang): pixels['total'],
+                "PAR": par['value'],
+                get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
+                get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
+            }
+            
+            # 各モードの指標値
+            for key in selected_indices:
+                result[f'{ALGORITHMS[key][0]} (Raw)'] = indices['raw'][key]
+                result[f'{ALGORITHMS[key][0]} (Masked)'] = indices['masked'][key]
+                result[f'{ALGORITHMS[key][0]} (Inner)'] = indices['inner'][key]
+            
+            results.append(result)
+            
+        except Exception as e:
+            st.error(f"{get_text('error_occurred', lang)} {str(e)} in file: {file.name}")
+            continue
+            
+    return results
+
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
     
@@ -376,15 +414,7 @@ def main():
             with indices_columns[i % 2]:
                 if st.checkbox(f"{key} - {name}", value=key in ["ExG", "GRVI","VARI"]):
                     selected_indices.append(key)
-        analysis_mode = st.radio(
-            "Analysis Mode",
-            ["raw", "masked", "inner"],
-            format_func=lambda x: {
-                "raw": "Raw Image",
-                "masked": "Masked Area",
-                "inner": "Inner Area Only"
-            }[x]
-        )        
+
     
     tab1, tab2 = st.tabs([
         get_text("single_image", lang),
@@ -453,7 +483,7 @@ def main():
             get_text("upload_multiple", lang),
             type=["png", "jpg", "jpeg"],
             accept_multiple_files=True,
-            key="batch_image_uploader"  # キーを追加
+            key="batch_image_uploader"
         )
         
         if uploaded_files and len(selected_indices) > 0:
@@ -461,57 +491,26 @@ def main():
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                results = []
-                total_files = len(uploaded_files)
-                
-                for i, file in enumerate(uploaded_files, 1):
-                    try:
-                        progress = i / total_files
-                        progress_bar.progress(progress)
-                        status_text.text(f"{get_text('processing', lang)} {file.name} ({i}/{total_files}, {progress:.1%})")
+                # バッチ処理実行
+                try:
+                    results = process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang)
+                    
+                    if results:
+                        status_text.text(get_text("processing_complete", lang))
                         
-                        # バッチ処理部分は変更なし
-                        file_bytes = np.frombuffer(file.read(), np.uint8)
-                        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                        df = pd.DataFrame(results)
+                        st.dataframe(df)
                         
-                        binary_mask, masked_image, edges, veg_pixels, total_pixels, indices, par = process_single_image(
-                            image, threshold_method, exg_threshold, selected_indices, analysis_mode
+                        csv = df.to_csv(index=False).encode('utf-8-sig')
+                        st.download_button(
+                            get_text("download_csv", lang),
+                            csv,
+                            "vegetation_analysis_results.csv",
+                            "text/csv",
+                            key='download-csv'
                         )
-                        
-                        result = {
-                            get_text("file_name", lang): file.name,
-                            get_text("coverage_rate_percent", lang): (veg_pixels / total_pixels) * 100,
-                            get_text("veg_pixels", lang): veg_pixels,
-                            get_text("total_pixels", lang): total_pixels,
-                            get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
-                            get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
-                        }
-                        
-                        for key in selected_indices:
-                            result[f'{ALGORITHMS[key][0]}({get_text("veg_area_values", lang)})'] = indices['vegetation'][key]
-                            result[f'{ALGORITHMS[key][0]}({get_text("whole_area_values", lang)})'] = indices['whole'][key]
-                        
-                        results.append(result)
-                        
-                    except Exception as e:
-                        st.error(f"{get_text('error_occurred', lang)} {str(e)}")
-                        continue
-                
-                if results:
-                    status_text.text(get_text("processing_complete", lang))
-                    
-                    df = pd.DataFrame(results)
-                    st.dataframe(df)
-                    
-                    csv = df.to_csv(index=False).encode('utf-8-sig')
-                    st.download_button(
-                        get_text("download_csv", lang),
-                        csv,
-                        "vegetation_analysis_results.csv",
-                        "text/csv",
-                        key='download-csv'
-                    )
+                except Exception as e:
+                    st.error(f"Batch processing failed: {str(e)}")
 
 if __name__ == "__main__":
     main()
