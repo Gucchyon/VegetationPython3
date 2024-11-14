@@ -243,7 +243,7 @@ def process_single_image(
     image = resize_if_needed(image)
     
     # float32で計算（メモリ削減）
-    image_float = image.astype(np.float32) / 255.0
+    image_float = image.astype(np.float32) 
     b, g, r = cv2.split(image_float)
     
     # メモリ解放
@@ -275,16 +275,10 @@ def process_single_image(
     total_pixels = binary_mask.size
     mask_bool = binary_mask > 0
     
-    basic_indices = ["INT", "NRI", "NGI", "NBI"]
-    
+    # 選択された指数の計算（ベクトル化処理）
     for index_name in selected_indices:
         if index_name in ALGORITHMS:
-            if index_name in basic_indices:
-                # 基本指数は正規化前の値を使用
-                value = ALGORITHMS[index_name][1](r, g, b)
-            else:
-                # その他の指数は正規化した値を使用
-                value = ALGORITHMS[index_name][1](nr, ng, nb)
+            value = ALGORITHMS[index_name][1](nr, ng, nb)
             indices_result["whole"][index_name] = float(np.mean(value))
             if veg_pixels > 0:
                 indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
