@@ -236,60 +236,79 @@ def process_single_image(
     image: np.ndarray,
     threshold_method: str,
     exg_threshold: float,
-    selected_indices: List[str]
+    selected_indices: List[str],
+    analysis_mode: str
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int, Dict, float]:
-    """1枚の画像を処理（メモリ効率化）"""
     # 画像のリサイズ
     image = resize_if_needed(image)
     
-    # float32で計算（メモリ削減）
+    # float32で計算
     image_float = image.astype(np.float32) 
     b, g, r = cv2.split(image_float)
     
-    # メモリ解放
     del image_float
     gc.collect()
     
-    # 正規化 (INTは除外)
-    total = r + g + b
-    nr = np.divide(r, total, out=np.zeros_like(r), where=total!=0)
-    ng = np.divide(g, total, out=np.zeros_like(g), where=total!=0)
-    nb = np.divide(b, total, out=np.zeros_like(b), where=total!=0)
+    # 元画像の合計値を保存
+    total_raw = r + g + b
     
-    # ExG計算と二値化
-    exg = 2 * ng - nr - nb
-    
-    if threshold_method == "otsu":
-        exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
-        thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        threshold = (thresh / 127.5) - 1
-        del exg_uint8
+    # 解析モードに応じた処理
+    if analysis_mode != "raw":
+        # 正規化値での ExG 計算
+        nr = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+        ng = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+        nb = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
+        
+        exg = 2 * ng - nr - nb
+        
+        if threshold_method == "otsu":
+            exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
+            thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            threshold = (thresh / 127.5) - 1
+            del exg_uint8
+        else:
+            threshold = exg_threshold
+        
+        binary_mask = (exg >= threshold).astype(np.uint8) * 255
+        
+        if analysis_mode == "inner":
+            kernel = np.ones((3,3), np.uint8)
+            binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
+        
+        edges = cv2.Canny(binary_mask, 100, 200)
+        
+        # マスク領域のRGB値で新たに正規化
+        mask_bool = binary_mask > 0
+        r_masked = r * mask_bool
+        g_masked = g * mask_bool
+        b_masked = b * mask_bool
+        total_masked = r_masked + g_masked + b_masked
+        
+        nr = np.divide(r_masked, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+        ng = np.divide(g_masked, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+        nb = np.divide(b_masked, total_raw, out=np.zeros_like(b), where=total_raw!=0)
     else:
-        threshold = exg_threshold
-    
-    binary_mask = (exg >= threshold).astype(np.uint8) * 255
+        binary_mask = np.ones_like(r, dtype=np.uint8) * 255
+        edges = np.zeros_like(binary_mask)
+        nr = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+        ng = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+        nb = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
     
     # マスクされた画像の作成
     masked_image = image.copy()
     masked_image[binary_mask == 0] = 0
     
-    # エッジ検出
-    edges = cv2.Canny(binary_mask, 100, 200)
-    
-    # Perimeter Area Ratio (PAR)の計算
+    # 指標計算
     perimeter_pixels = np.count_nonzero(edges)
     veg_pixels = np.count_nonzero(binary_mask)
     par = perimeter_pixels / veg_pixels if veg_pixels > 0 else 0
     
-    # 植生指数の計算
     indices_result = {"vegetation": {}, "whole": {}}
     total_pixels = binary_mask.size
     mask_bool = binary_mask > 0
     
-    # 選択された指数の計算（ベクトル化処理）
     for index_name in selected_indices:
         if index_name == "INT":
-            # INTは正規化前の値を使用
             value = ALGORITHMS[index_name][1](r, g, b)
         elif index_name in ALGORITHMS:
             value = ALGORITHMS[index_name][1](nr, ng, nb)
@@ -344,6 +363,15 @@ def main():
             with indices_columns[i % 2]:
                 if st.checkbox(f"{key} - {name}", value=key in ["ExG", "GRVI","VARI"]):
                     selected_indices.append(key)
+        analysis_mode = st.radio(
+            "Analysis Mode",
+            ["raw", "masked", "inner"],
+            format_func=lambda x: {
+                "raw": "Raw Image",
+                "masked": "Masked Area",
+                "inner": "Inner Area Only"
+            }[x]
+        )        
     
     tab1, tab2 = st.tabs([
         get_text("single_image", lang),
@@ -364,7 +392,7 @@ def main():
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
                 binary_mask, masked_image, edges, veg_pixels, total_pixels, indices, par = process_single_image(
-                    image, threshold_method, exg_threshold, selected_indices
+                    image, threshold_method, exg_threshold, selected_indices, analysis_mode
                 )
                 
                 col1, col2, col3 = st.columns(3)
@@ -429,8 +457,8 @@ def main():
                         image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                         
-                        binary_mask, veg_pixels, total_pixels, indices = process_single_image(
-                            image, threshold_method, exg_threshold, selected_indices
+                        binary_mask, masked_image, edges, veg_pixels, total_pixels, indices, par = process_single_image(
+                            image, threshold_method, exg_threshold, selected_indices, analysis_mode
                         )
                         
                         result = {
