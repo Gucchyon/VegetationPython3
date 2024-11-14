@@ -44,31 +44,37 @@ TRANSLATIONS = {
         This application analyzes vegetation in images using various vegetation indices. You can process both single images and multiple images in batch mode.
         
         **Key Features:**
-        - Vegetation extraction using ExG
-        - Calculation of multiple vegetation indices
+        - Vegetation extraction using Excess Green Index (ExG) with either automatic (Otsu) or manual thresholding
+        - Multiple calculation modes:
+          - Raw values: Calculated from the original image
+          - Masked values: Reduces the influence of background soil and water by focusing only on vegetation areas
+        - Edge detection and Perimeter Area Ratio (PAR) calculation to evaluate leaf size and fineness
         - Support for batch processing of multiple images
         - Detailed analysis results with CSV export
         
         **How to Use:**
         1. **Analysis Settings (Sidebar)**
-           - Select thresholding method (Otsu's or ExG)
-           - If using ExG, adjust the threshold value
+           - Select ExG thresholding method: 
+             - Otsu's method for automatic threshold determination
+             - Manual threshold setting for fine-tuning
            - Choose vegetation indices to calculate
         
         2. **Single Image Analysis**
            - Upload a single image
-           - View the original and processed images
-           - See vegetation coverage and index calculations
+           - View the original image, vegetation mask, and edge detection results
+           - See vegetation coverage and PAR (higher PAR indicates finer or smaller leaves)
+           - Compare indices between raw image and masked areas
         
         3. **Batch Processing**
            - Upload multiple images
            - Start processing to analyze all images
-           - Download results as CSV
+           - Download comprehensive results as CSV
         
         **Tips:**
         - For best results, use clear images with good contrast
-        - The ExG threshold can be adjusted if the default value doesn't provide good results
-        - Batch processing is ideal for analyzing multiple images with the same settings
+        - Use Otsu's method first, then switch to manual threshold if needed
+        - Higher PAR values indicate finer leaf structure or smaller leaves
+        - Masked values are useful when background (soil, water) might affect the analysis
         """,    
     },
     "es": {
@@ -107,32 +113,38 @@ TRANSLATIONS = {
         Esta aplicación analiza la vegetación en imágenes utilizando varios índices de vegetación. Puede procesar tanto imágenes individuales como múltiples imágenes en modo por lotes.
         
         **Características Principales:**
-        - Extracción de vegetación usando ExG
-        - Cálculo de múltiples índices de vegetación
+        - Extracción de vegetación usando el Índice de Exceso de Verde (ExG) con umbral automático (Otsu) o manual
+        - Múltiples modos de cálculo:
+          - Valores brutos: Calculados de la imagen original
+          - Valores enmascarados: Reduce la influencia del suelo y agua de fondo al enfocarse solo en áreas de vegetación
+        - Detección de bordes y cálculo de PAR para evaluar el tamaño y finura de las hojas
         - Soporte para procesamiento por lotes de múltiples imágenes
         - Resultados detallados con exportación a CSV
         
         **Cómo Usar:**
         1. **Configuración de Análisis (Barra Lateral)**
-           - Seleccione el método de umbral (Otsu o ExG)
-           - Si usa ExG, ajuste el valor del umbral
+           - Seleccione el método de umbral para ExG:
+             - Método de Otsu para determinación automática
+             - Ajuste manual del umbral para control preciso
            - Elija los índices de vegetación a calcular
         
         2. **Análisis de Imagen Individual**
            - Suba una imagen
-           - Vea la imagen original y procesada
-           - Observe la cobertura vegetal y los cálculos de índices
+           - Vea la imagen original, máscara de vegetación y resultados de detección de bordes
+           - Observe la cobertura vegetal y PAR (PAR más alto indica hojas más finas o pequeñas)
+           - Compare índices entre imagen bruta y áreas enmascaradas
         
         3. **Procesamiento por Lotes**
            - Suba múltiples imágenes
            - Inicie el procesamiento para analizar todas las imágenes
-           - Descargue los resultados en CSV
+           - Descargue resultados completos en CSV
         
         **Consejos:**
         - Para mejores resultados, use imágenes claras con buen contraste
-        - El umbral ExG puede ajustarse si el valor predeterminado no proporciona buenos resultados
-        - El procesamiento por lotes es ideal para analizar múltiples imágenes con la misma configuración
-        """,    
+        - Use primero el método de Otsu, luego cambie al umbral manual si es necesario
+        - Valores PAR más altos indican estructura de hojas más finas o hojas más pequeñas
+        - Los valores enmascarados son útiles cuando el fondo (suelo, agua) podría afectar el análisis
+        """,       
     },
     "ja": {
         "app_title": "植生解析アプリケーション",
@@ -170,21 +182,26 @@ TRANSLATIONS = {
         このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
 
         **主な機能：**
-        - ExGによる植生のある領域の抽出
-        - 複数の植生指数の計算
+        - Excess Green Index (ExG)を用いた植生抽出（大津の方法による自動閾値設定または手動設定）
+        - 複数の計算モード：
+          - 元画像の値：画像全体から計算
+          - マスク値：植生領域のみを対象とし、背景の土壌や水の影響を低減
+        - エッジ検出と周長面積比（PAR）による葉の大きさや細かさの評価
         - 複数画像の一括処理機能
         - 詳細な解析結果のCSVエクスポート
 
         **使用方法：**
         1. **解析設定（サイドバー）**
-           - 2値化方法の選択（大津の方法またはExG）
-           - ExGを使用する場合は閾値を調整
+           - ExGの閾値設定方法を選択：
+             - 大津の方法による自動閾値決定
+             - 手動での閾値調整
            - 計算する植生指数を選択
 
         2. **単一画像解析**
            - 画像をアップロード
-           - 元画像と処理結果を確認
-           - 植生被覆率と指数計算結果を確認
+           - 元画像、植生マスク、エッジ検出結果を確認
+           - 植生被覆率とPAR（高いPARは葉が細かいまたは小さいことを示す）を確認
+           - 元画像とマスク領域での指数値を比較
 
         3. **バッチ処理**
            - 複数の画像をアップロード
@@ -193,8 +210,9 @@ TRANSLATIONS = {
 
         **ヒント：**
         - より良い結果を得るために、コントラストの良い鮮明な画像を使用してください
-        - デフォルトの値で良い結果が得られない場合はExGの閾値を調整してください
-        - 同じ設定で複数の画像を解析する場合はバッチ処理が便利です
+        - まず大津の方法を試し、必要に応じて手動閾値に切り替えてください
+        - PAR値が高いほど、葉が細かい、または小さいことを示します
+        - 背景（土壌や水）が解析に影響を与える可能性がある場合、マスク値が有用です
         """,    
     }
 }
