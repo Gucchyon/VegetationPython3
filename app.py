@@ -285,6 +285,7 @@ def process_single_image(
             else:
                 # その他の指数は正規化した値を使用
                 value = ALGORITHMS[index_name][1](nr, ng, nb)
+            indices_result["whole"][index_name] = float(np.mean(value))
             if veg_pixels > 0:
                 indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
             else:
