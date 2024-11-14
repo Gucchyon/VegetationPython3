@@ -44,7 +44,7 @@ TRANSLATIONS = {
         This application analyzes vegetation in images using various vegetation indices. You can process both single images and multiple images in batch mode.
         
         **Key Features:**
-        - Vegetation extraction using ExG or Otsu's method
+        - Vegetation extraction using ExG
         - Calculation of multiple vegetation indices
         - Support for batch processing of multiple images
         - Detailed analysis results with CSV export
@@ -107,7 +107,7 @@ TRANSLATIONS = {
         Esta aplicación analiza la vegetación en imágenes utilizando varios índices de vegetación. Puede procesar tanto imágenes individuales como múltiples imágenes en modo por lotes.
         
         **Características Principales:**
-        - Extracción de vegetación usando método ExG u Otsu
+        - Extracción de vegetación usando ExG
         - Cálculo de múltiples índices de vegetación
         - Soporte para procesamiento por lotes de múltiples imágenes
         - Resultados detallados con exportación a CSV
@@ -170,7 +170,7 @@ TRANSLATIONS = {
         このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
 
         **主な機能：**
-        - ExG法または大津の方法による植生のある領域の抽出
+        - ExGによる植生のある領域の抽出
         - 複数の植生指数の計算
         - 複数画像の一括処理機能
         - 詳細な解析結果のCSVエクスポート
@@ -201,7 +201,7 @@ TRANSLATIONS = {
 
 # 植生指数の定義
 ALGORITHMS = {
-    "INT": ("Intensity", lambda r, g, b: (r + g + b) / 3),
+    "INT": ("Intensity", lambda r, g, b: (r + g + b)/255 / 3),
     "NRI": ("Normalized Red Index", lambda r, g, b: r),
     "NGI": ("Normalized Green Index", lambda r, g, b: g),
     "NBI": ("Normalized Blue Index", lambda r, g, b: b),
@@ -237,7 +237,7 @@ def process_single_image(
     threshold_method: str,
     exg_threshold: float,
     selected_indices: List[str]
-) -> Tuple[np.ndarray, int, int, Dict]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int, Dict, float]:
     """1枚の画像を処理（メモリ効率化）"""
     # 画像のリサイズ
     image = resize_if_needed(image)
@@ -269,9 +269,20 @@ def process_single_image(
     
     binary_mask = (exg >= threshold).astype(np.uint8) * 255
     
+    # マスクされた画像の作成
+    masked_image = image.copy()
+    masked_image[binary_mask == 0] = 0
+    
+    # エッジ検出
+    edges = cv2.Canny(binary_mask, 100, 200)
+    
+    # Perimeter Area Ratio (PAR)の計算
+    perimeter_pixels = np.count_nonzero(edges)
+    veg_pixels = np.count_nonzero(binary_mask)
+    par = perimeter_pixels / veg_pixels if veg_pixels > 0 else 0
+    
     # 植生指数の計算
     indices_result = {"vegetation": {}, "whole": {}}
-    veg_pixels = np.count_nonzero(binary_mask)
     total_pixels = binary_mask.size
     mask_bool = binary_mask > 0
     
@@ -290,7 +301,8 @@ def process_single_image(
             indices_result["vegetation"][index_name] = 0.0
         del value
     
-    return binary_mask, veg_pixels, total_pixels, indices_result
+    return binary_mask, masked_image, edges, veg_pixels, total_pixels, indices_result, par
+
 
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
@@ -330,7 +342,7 @@ def main():
         indices_columns = st.columns(2)
         for i, (key, (name, _)) in enumerate(ALGORITHMS.items()):
             with indices_columns[i % 2]:
-                if st.checkbox(f"{key} - {name}", value=key in ["ExG", "GRVI"]):
+                if st.checkbox(f"{key} - {name}", value=key in ["ExG", "GRVI","VARI"]):
                     selected_indices.append(key)
     
     tab1, tab2 = st.tabs([
@@ -344,32 +356,41 @@ def main():
             type=["png", "jpg", "jpeg"]
         )
         
+    with tab1:
+        uploaded_file = st.file_uploader(
+            get_text("upload_image", lang),
+            type=["png", "jpg", "jpeg"]
+        )
+        
         if uploaded_file:
             try:
-                # 画像処理部分は変更なし
                 file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                binary_mask, veg_pixels, total_pixels, indices = process_single_image(
+                binary_mask, masked_image, edges, veg_pixels, total_pixels, indices, par = process_single_image(
                     image, threshold_method, exg_threshold, selected_indices
                 )
                 
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     st.image(image, caption=get_text("original_image", lang))
                 with col2:
-                    st.image(binary_mask, caption=get_text("vegetation_result", lang))
+                    st.image(masked_image, caption=get_text("vegetation_result", lang))
+                with col3:
+                    st.image(edges, caption="Edge Detection Result")
                 
                 coverage = (veg_pixels / total_pixels) * 100
                 
-                metrics_cols = st.columns(3)
+                metrics_cols = st.columns(4)  # 4列に変更
                 with metrics_cols[0]:
                     st.metric(get_text("coverage_rate", lang), f"{coverage:.2f}%")
                 with metrics_cols[1]:
                     st.metric(get_text("veg_pixels", lang), f"{veg_pixels:,}")
                 with metrics_cols[2]:
                     st.metric(get_text("total_pixels", lang), f"{total_pixels:,}")
+                with metrics_cols[3]:
+                    st.metric("PAR (Perimeter Area Ratio)", f"{par:.4f}")
                 
                 if indices["vegetation"]:
                     st.subheader(get_text("index_results", lang))
