@@ -6,6 +6,199 @@ import base64
 from typing import Tuple, Dict, List
 import gc
 
+# 言語定義
+TRANSLATIONS = {
+    "en": {
+        "app_title": "Vegetation Analysis Application",
+        "analysis_settings": "Analysis Settings",
+        "threshold_method": "Thresholding Method",
+        "otsu_method": "Otsu's Method (Automatic)",
+        "exg_threshold_method": "ExG Threshold",
+        "exg_threshold_value": "ExG Threshold Value",
+        "vegetation_indices": "Vegetation Indices",
+        "single_image": "Single Image Analysis",
+        "batch_processing": "Batch Processing",
+        "upload_image": "Upload Image",
+        "upload_multiple": "Upload Multiple Images",
+        "original_image": "Original Image",
+        "vegetation_result": "Vegetation Extraction Result",
+        "coverage_rate": "Vegetation Coverage",
+        "veg_pixels": "Vegetation Pixels",
+        "total_pixels": "Total Pixels",
+        "index_results": "Vegetation Index Results",
+        "veg_area_values": "Values for Vegetation Area:",
+        "whole_area_values": "Values for Whole Image:",
+        "error_occurred": "An error occurred: ",
+        "start_batch": "Start Batch Processing",
+        "processing": "Processing: ",
+        "processing_complete": "Processing Complete!",
+        "download_csv": "Download CSV File",
+        "file_name": "File Name",
+        "coverage_rate_percent": "Vegetation Coverage (%)",
+        "threshold_method_col": "Threshold Method",
+        "threshold_value": "Threshold Value",
+        "automatic": "Automatic",
+            "help": "Help",
+        "about_title": "About This Application",
+        "about_description": """
+        This application analyzes vegetation in images using various vegetation indices. You can process both single images and multiple images in batch mode.
+        
+        **Key Features:**
+        - Vegetation extraction using ExG or Otsu's method
+        - Calculation of multiple vegetation indices
+        - Support for batch processing of multiple images
+        - Detailed analysis results with CSV export
+        
+        **How to Use:**
+        1. **Analysis Settings (Sidebar)**
+           - Select thresholding method (Otsu's or ExG)
+           - If using ExG, adjust the threshold value
+           - Choose vegetation indices to calculate
+        
+        2. **Single Image Analysis**
+           - Upload a single image
+           - View the original and processed images
+           - See vegetation coverage and index calculations
+        
+        3. **Batch Processing**
+           - Upload multiple images
+           - Start processing to analyze all images
+           - Download results as CSV
+        
+        **Tips:**
+        - For best results, use clear images with good contrast
+        - The ExG threshold can be adjusted if the default value doesn't provide good results
+        - Batch processing is ideal for analyzing multiple images with the same settings
+        """,    
+    },
+    "es": {
+        "app_title": "Aplicación de Análisis de Vegetación",
+        "analysis_settings": "Configuración de Análisis",
+        "threshold_method": "Método de Umbral",
+        "otsu_method": "Método de Otsu (Automático)",
+        "exg_threshold_method": "Umbral ExG",
+        "exg_threshold_value": "Valor del Umbral ExG",
+        "vegetation_indices": "Índices de Vegetación",
+        "single_image": "Análisis de Imagen Individual",
+        "batch_processing": "Procesamiento por Lotes",
+        "upload_image": "Subir Imagen",
+        "upload_multiple": "Subir Múltiples Imágenes",
+        "original_image": "Imagen Original",
+        "vegetation_result": "Resultado de Extracción de Vegetación",
+        "coverage_rate": "Cobertura de Vegetación",
+        "veg_pixels": "Píxeles de Vegetación",
+        "total_pixels": "Píxeles Totales",
+        "index_results": "Resultados de Índices de Vegetación",
+        "veg_area_values": "Valores para Área de Vegetación:",
+        "whole_area_values": "Valores para Imagen Completa:",
+        "error_occurred": "Ocurrió un error: ",
+        "start_batch": "Iniciar Procesamiento por Lotes",
+        "processing": "Procesando: ",
+        "processing_complete": "¡Procesamiento Completado!",
+        "download_csv": "Descargar Archivo CSV",
+        "file_name": "Nombre del Archivo",
+        "coverage_rate_percent": "Cobertura de Vegetación (%)",
+        "threshold_method_col": "Método de Umbral",
+        "threshold_value": "Valor del Umbral",
+        "automatic": "Automático",
+            "help": "Ayuda",
+        "about_title": "Acerca de esta Aplicación",
+        "about_description": """
+        Esta aplicación analiza la vegetación en imágenes utilizando varios índices de vegetación. Puede procesar tanto imágenes individuales como múltiples imágenes en modo por lotes.
+        
+        **Características Principales:**
+        - Extracción de vegetación usando método ExG u Otsu
+        - Cálculo de múltiples índices de vegetación
+        - Soporte para procesamiento por lotes de múltiples imágenes
+        - Resultados detallados con exportación a CSV
+        
+        **Cómo Usar:**
+        1. **Configuración de Análisis (Barra Lateral)**
+           - Seleccione el método de umbral (Otsu o ExG)
+           - Si usa ExG, ajuste el valor del umbral
+           - Elija los índices de vegetación a calcular
+        
+        2. **Análisis de Imagen Individual**
+           - Suba una imagen
+           - Vea la imagen original y procesada
+           - Observe la cobertura vegetal y los cálculos de índices
+        
+        3. **Procesamiento por Lotes**
+           - Suba múltiples imágenes
+           - Inicie el procesamiento para analizar todas las imágenes
+           - Descargue los resultados en CSV
+        
+        **Consejos:**
+        - Para mejores resultados, use imágenes claras con buen contraste
+        - El umbral ExG puede ajustarse si el valor predeterminado no proporciona buenos resultados
+        - El procesamiento por lotes es ideal para analizar múltiples imágenes con la misma configuración
+        """,    
+    },
+    "ja": {
+        "app_title": "植生解析アプリケーション",
+        "analysis_settings": "解析設定",
+        "threshold_method": "2値化方法",
+        "otsu_method": "大津の方法（自動）",
+        "exg_threshold_method": "ExGによる閾値指定",
+        "exg_threshold_value": "ExG閾値",
+        "vegetation_indices": "使用する植生指数",
+        "single_image": "単一画像解析",
+        "batch_processing": "バッチ処理",
+        "upload_image": "画像をアップロード",
+        "upload_multiple": "複数の画像をアップロード",
+        "original_image": "元画像",
+        "vegetation_result": "植生抽出結果",
+        "coverage_rate": "植生被覆率",
+        "veg_pixels": "植生ピクセル数",
+        "total_pixels": "総ピクセル数",
+        "index_results": "植生指数の計算結果",
+        "veg_area_values": "植生部分の指数値:",
+        "whole_area_values": "画像全体の指数値:",
+        "error_occurred": "エラーが発生しました: ",
+        "start_batch": "バッチ処理開始",
+        "processing": "処理中: ",
+        "processing_complete": "処理完了!",
+        "download_csv": "CSVファイルをダウンロード",
+        "file_name": "ファイル名",
+        "coverage_rate_percent": "植生被覆率(%)",
+        "threshold_method_col": "2値化方法",
+        "threshold_value": "閾値",
+        "automatic": "自動",
+            "help": "ヘルプ",
+        "about_title": "このアプリケーションについて",
+        "about_description": """
+        このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
+
+        **主な機能：**
+        - ExG法または大津の方法による植生のある領域の抽出
+        - 複数の植生指数の計算
+        - 複数画像の一括処理機能
+        - 詳細な解析結果のCSVエクスポート
+
+        **使用方法：**
+        1. **解析設定（サイドバー）**
+           - 2値化方法の選択（大津の方法またはExG）
+           - ExGを使用する場合は閾値を調整
+           - 計算する植生指数を選択
+
+        2. **単一画像解析**
+           - 画像をアップロード
+           - 元画像と処理結果を確認
+           - 植生被覆率と指数計算結果を確認
+
+        3. **バッチ処理**
+           - 複数の画像をアップロード
+           - 処理を開始して全画像を解析
+           - 結果をCSVでダウンロード
+
+        **ヒント：**
+        - より良い結果を得るために、コントラストの良い鮮明な画像を使用してください
+        - デフォルトの値で良い結果が得られない場合はExGの閾値を調整してください
+        - 同じ設定で複数の画像を解析する場合はバッチ処理が便利です
+        """,    
+    }
+}
+
 # 植生指数の定義
 ALGORITHMS = {
     "INT": ("Intensity", lambda r, g, b: (r + g + b) / 3),
@@ -24,6 +217,10 @@ ALGORITHMS = {
     "RGBVI": ("Red Green Blue Vegetation Index", lambda r, g, b: np.divide(g*g - r*b, g*g + r*b, out=np.zeros_like(r), where=(g*g + r*b)!=0)),
     "VEG": ("Vegetativen", lambda r, g, b: np.divide(g, np.power(r, 0.667) * np.power(b, 0.333), out=np.zeros_like(r), where=(r > 0) & (b > 0)))
 }
+
+def get_text(key: str, lang: str) -> str:
+    """指定された言語のテキストを取得"""
+    return TRANSLATIONS[lang][key]
 
 def resize_if_needed(image: np.ndarray, max_size: int = 1024) -> np.ndarray:
     """大きな画像をリサイズして処理を軽くする"""
@@ -94,26 +291,37 @@ def process_single_image(
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
     
-    st.title("植生解析アプリケーション")
+    # 言語選択
+    lang = st.sidebar.selectbox(
+        "Language / Idioma / 言語",
+        ["en", "es", "ja"],
+        format_func=lambda x: {"en": "English", "es": "Español", "ja": "日本語"}[x]
+    )
+    
+    st.title(get_text("app_title", lang))
+    
+    # ヘルプボタンを追加
+    if st.button(get_text("help", lang), type="secondary"):
+        st.markdown("## " + get_text("about_title", lang))
+        st.markdown(get_text("about_description", lang))
+        st.divider()
     
     # サイドバーでの設定
     with st.sidebar:
-        st.header("解析設定")
+        st.header(get_text("analysis_settings", lang))
         
-        # 2値化方法の選択
         threshold_method = st.radio(
-            "2値化方法",
+            get_text("threshold_method", lang),
             ["otsu", "exg"],
-            format_func=lambda x: "大津の方法（自動）" if x == "otsu" else "ExGによる閾値指定"
+            format_func=lambda x: get_text("otsu_method" if x == "otsu" else "exg_threshold_method", lang)
         )
         
         if threshold_method == "exg":
-            exg_threshold = st.slider("ExG閾値", -1.0, 1.0, 0.2, 0.01)
+            exg_threshold = st.slider(get_text("exg_threshold_value", lang), -1.0, 1.0, 0.2, 0.01)
         else:
             exg_threshold = 0.2
         
-        # 植生指数の選択
-        st.subheader("使用する植生指数")
+        st.subheader(get_text("vegetation_indices", lang))
         selected_indices = []
         indices_columns = st.columns(2)
         for i, (key, (name, _)) in enumerate(ALGORITHMS.items()):
@@ -121,14 +329,20 @@ def main():
                 if st.checkbox(f"{key} - {name}", value=key in ["ExG", "GRVI"]):
                     selected_indices.append(key)
     
-    # メインコンテンツ
-    tab1, tab2 = st.tabs(["単一画像解析", "バッチ処理"])
+    tab1, tab2 = st.tabs([
+        get_text("single_image", lang),
+        get_text("batch_processing", lang)
+    ])
     
     with tab1:
-        uploaded_file = st.file_uploader("画像をアップロード", type=["png", "jpg", "jpeg"])
+        uploaded_file = st.file_uploader(
+            get_text("upload_image", lang),
+            type=["png", "jpg", "jpeg"]
+        )
         
         if uploaded_file:
             try:
+                # 画像処理部分は変更なし
                 file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -139,45 +353,44 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.image(image, caption="元画像")
+                    st.image(image, caption=get_text("original_image", lang))
                 with col2:
-                    st.image(binary_mask, caption="植生抽出結果")
+                    st.image(binary_mask, caption=get_text("vegetation_result", lang))
                 
-                # 結果表示
                 coverage = (veg_pixels / total_pixels) * 100
                 
                 metrics_cols = st.columns(3)
                 with metrics_cols[0]:
-                    st.metric("植生被覆率", f"{coverage:.2f}%")
+                    st.metric(get_text("coverage_rate", lang), f"{coverage:.2f}%")
                 with metrics_cols[1]:
-                    st.metric("植生ピクセル数", f"{veg_pixels:,}")
+                    st.metric(get_text("veg_pixels", lang), f"{veg_pixels:,}")
                 with metrics_cols[2]:
-                    st.metric("総ピクセル数", f"{total_pixels:,}")
+                    st.metric(get_text("total_pixels", lang), f"{total_pixels:,}")
                 
                 if indices["vegetation"]:
-                    st.subheader("植生指数の計算結果")
+                    st.subheader(get_text("index_results", lang))
                     index_cols = st.columns(2)
                     with index_cols[0]:
-                        st.write("植生部分の指数値:")
+                        st.write(get_text("veg_area_values", lang))
                         for key in selected_indices:
                             st.write(f"{ALGORITHMS[key][0]}: {indices['vegetation'][key]:.4f}")
                     with index_cols[1]:
-                        st.write("画像全体の指数値:")
+                        st.write(get_text("whole_area_values", lang))
                         for key in selected_indices:
                             st.write(f"{ALGORITHMS[key][0]}: {indices['whole'][key]:.4f}")
             
             except Exception as e:
-                st.error(f"エラーが発生しました: {str(e)}")
+                st.error(f"{get_text('error_occurred', lang)} {str(e)}")
     
     with tab2:
         uploaded_files = st.file_uploader(
-            "複数の画像をアップロード",
+            get_text("upload_multiple", lang),
             type=["png", "jpg", "jpeg"],
             accept_multiple_files=True
         )
         
         if uploaded_files and len(selected_indices) > 0:
-            if st.button("バッチ処理開始", type="primary"):
+            if st.button(get_text("start_batch", lang), type="primary"):
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
@@ -188,8 +401,9 @@ def main():
                     try:
                         progress = i / total_files
                         progress_bar.progress(progress)
-                        status_text.text(f"処理中: {file.name} ({i}/{total_files}, {progress:.1%})")
+                        status_text.text(f"{get_text('processing', lang)} {file.name} ({i}/{total_files}, {progress:.1%})")
                         
+                        # バッチ処理部分は変更なし
                         file_bytes = np.frombuffer(file.read(), np.uint8)
                         image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -199,33 +413,33 @@ def main():
                         )
                         
                         result = {
-                            'ファイル名': file.name,
-                            '植生被覆率(%)': (veg_pixels / total_pixels) * 100,
-                            '植生ピクセル数': veg_pixels,
-                            '総ピクセル数': total_pixels,
-                            '2値化方法': "大津の方法" if threshold_method == "otsu" else "ExG閾値指定",
-                            '閾値': "自動" if threshold_method == "otsu" else str(exg_threshold)
+                            get_text("file_name", lang): file.name,
+                            get_text("coverage_rate_percent", lang): (veg_pixels / total_pixels) * 100,
+                            get_text("veg_pixels", lang): veg_pixels,
+                            get_text("total_pixels", lang): total_pixels,
+                            get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
+                            get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
                         }
                         
                         for key in selected_indices:
-                            result[f'{ALGORITHMS[key][0]}(植生部)'] = indices['vegetation'][key]
-                            result[f'{ALGORITHMS[key][0]}(全体)'] = indices['whole'][key]
+                            result[f'{ALGORITHMS[key][0]}({get_text("veg_area_values", lang)})'] = indices['vegetation'][key]
+                            result[f'{ALGORITHMS[key][0]}({get_text("whole_area_values", lang)})'] = indices['whole'][key]
                         
                         results.append(result)
                         
                     except Exception as e:
-                        st.error(f"Error processing {file.name}: {str(e)}")
+                        st.error(f"{get_text('error_occurred', lang)} {str(e)}")
                         continue
                 
                 if results:
-                    status_text.text("処理完了!")
+                    status_text.text(get_text("processing_complete", lang))
                     
                     df = pd.DataFrame(results)
                     st.dataframe(df)
                     
                     csv = df.to_csv(index=False).encode('utf-8-sig')
                     st.download_button(
-                        "CSVファイルをダウンロード",
+                        get_text("download_csv", lang),
                         csv,
                         "vegetation_analysis_results.csv",
                         "text/csv",
