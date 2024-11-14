@@ -236,92 +236,105 @@ def process_single_image(
     image: np.ndarray,
     threshold_method: str,
     exg_threshold: float,
-    selected_indices: List[str],
-    analysis_mode: str
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int, Dict, float]:
+    selected_indices: List[str]
+) -> Tuple[Dict[str, np.ndarray], Dict[str, int], Dict[str, Dict], Dict[str, float]]:
     # 画像のリサイズ
     image = resize_if_needed(image)
     
     # float32で計算
     image_float = image.astype(np.float32) 
     b, g, r = cv2.split(image_float)
-    
     del image_float
     gc.collect()
     
     # 元画像の合計値を保存
     total_raw = r + g + b
     
-    # 解析モードに応じた処理
-    if analysis_mode != "raw":
-        # 正規化値での ExG 計算
-        nr = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
-        ng = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
-        nb = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
-        
-        exg = 2 * ng - nr - nb
-        
-        if threshold_method == "otsu":
-            exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
-            thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            threshold = (thresh / 127.5) - 1
-            del exg_uint8
-        else:
-            threshold = exg_threshold
-        
-        binary_mask = (exg >= threshold).astype(np.uint8) * 255
-        
-        if analysis_mode == "inner":
-            kernel = np.ones((3,3), np.uint8)
-            binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
-        
-        edges = cv2.Canny(binary_mask, 100, 200)
-        
-        # マスク領域のRGB値で新たに正規化
-        mask_bool = binary_mask > 0
-        r_masked = r * mask_bool
-        g_masked = g * mask_bool
-        b_masked = b * mask_bool
-        total_masked = r_masked + g_masked + b_masked
-        
-        nr = np.divide(r_masked, total_raw, out=np.zeros_like(r), where=total_raw!=0)
-        ng = np.divide(g_masked, total_raw, out=np.zeros_like(g), where=total_raw!=0)
-        nb = np.divide(b_masked, total_raw, out=np.zeros_like(b), where=total_raw!=0)
-    else:
-        binary_mask = np.ones_like(r, dtype=np.uint8) * 255
-        edges = np.zeros_like(binary_mask)
-        nr = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
-        ng = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
-        nb = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
+    # Raw mode用の正規化
+    nr_raw = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+    ng_raw = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+    nb_raw = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
     
-    # マスクされた画像の作成
+    # マスク生成
+    exg = 2 * ng_raw - nr_raw - nb_raw
+    if threshold_method == "otsu":
+        exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
+        thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        threshold = (thresh / 127.5) - 1
+        del exg_uint8
+    else:
+        threshold = exg_threshold
+    
+    binary_mask = (exg >= threshold).astype(np.uint8) * 255
+    inner_mask = cv2.erode(binary_mask, np.ones((3,3), np.uint8), iterations=1)
+    edges = cv2.Canny(binary_mask, 100, 200)
+    
+    # 各モード用のマスク処理
+    mask_bool = binary_mask > 0
+    inner_bool = inner_mask > 0
+    
+    # マスクされた値の計算
+    r_masked = r * mask_bool
+    g_masked = g * mask_bool
+    b_masked = b * mask_bool
+    
+    r_inner = r * inner_bool
+    g_inner = g * inner_bool
+    b_inner = b * inner_bool
+    
+    # 各モード用の正規化値
+    nr_masked = np.divide(r_masked, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+    ng_masked = np.divide(g_masked, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+    nb_masked = np.divide(b_masked, total_raw, out=np.zeros_like(b), where=total_raw!=0)
+    
+    nr_inner = np.divide(r_inner, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+    ng_inner = np.divide(g_inner, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+    nb_inner = np.divide(b_inner, total_raw, out=np.zeros_like(b), where=total_raw!=0)
+    
+    # 画像の準備
     masked_image = image.copy()
     masked_image[binary_mask == 0] = 0
+    inner_image = image.copy()
+    inner_image[inner_mask == 0] = 0
     
-    # 指標計算
-    perimeter_pixels = np.count_nonzero(edges)
-    veg_pixels = np.count_nonzero(binary_mask)
-    par = perimeter_pixels / veg_pixels if veg_pixels > 0 else 0
+    images = {
+        "binary": binary_mask,
+        "masked": masked_image,
+        "inner": inner_image,
+        "edges": edges
+    }
     
-    indices_result = {"vegetation": {}, "whole": {}}
-    total_pixels = binary_mask.size
-    mask_bool = binary_mask > 0
+    # ピクセル数の計算
+    pixels = {
+        "veg": np.count_nonzero(binary_mask),
+        "inner": np.count_nonzero(inner_mask),
+        "total": binary_mask.size,
+        "perimeter": np.count_nonzero(edges)
+    }
     
+    # 各モードでの指標計算
+    indices_result = {"raw": {}, "masked": {}, "inner": {}}
     for index_name in selected_indices:
         if index_name == "INT":
-            value = ALGORITHMS[index_name][1](r, g, b)
-        elif index_name in ALGORITHMS:
-            value = ALGORITHMS[index_name][1](nr, ng, nb)
-            
-        indices_result["whole"][index_name] = float(np.mean(value))
-        if veg_pixels > 0:
-            indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
+            raw_value = ALGORITHMS[index_name][1](r, g, b)
+            masked_value = ALGORITHMS[index_name][1](r_masked, g_masked, b_masked)
+            inner_value = ALGORITHMS[index_name][1](r_inner, g_inner, b_inner)
         else:
-            indices_result["vegetation"][index_name] = 0.0
-        del value
+            raw_value = ALGORITHMS[index_name][1](nr_raw, ng_raw, nb_raw)
+            masked_value = ALGORITHMS[index_name][1](nr_masked, ng_masked, nb_masked)
+            inner_value = ALGORITHMS[index_name][1](nr_inner, ng_inner, nb_inner)
+        
+        indices_result["raw"][index_name] = float(np.mean(raw_value))
+        indices_result["masked"][index_name] = float(np.mean(raw_value[mask_bool])) if pixels["veg"] > 0 else 0.0
+        indices_result["inner"][index_name] = float(np.mean(raw_value[inner_bool])) if pixels["inner"] > 0 else 0.0
+        del raw_value, masked_value, inner_value
     
-    return binary_mask, masked_image, edges, veg_pixels, total_pixels, indices_result, par
-
+    # PAR計算
+    par = {
+        "value": pixels["perimeter"] / pixels["veg"] if pixels["veg"] > 0 else 0
+    }
+    
+    return images, pixels, indices_result, par
 
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
@@ -382,7 +395,7 @@ def main():
         uploaded_file = st.file_uploader(
             get_text("upload_image", lang),
             type=["png", "jpg", "jpeg"],
-            key="single_image_uploader"  # キーを追加
+            key="single_image_uploader"
         )
         
         if uploaded_file:
@@ -391,45 +404,50 @@ def main():
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                binary_mask, masked_image, edges, veg_pixels, total_pixels, indices, par = process_single_image(
-                    image, threshold_method, exg_threshold, selected_indices, analysis_mode
+                images, pixels, indices, par = process_single_image(
+                    image, threshold_method, exg_threshold, selected_indices
                 )
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.image(image, caption=get_text("original_image", lang))
                 with col2:
-                    st.image(masked_image, caption=get_text("vegetation_result", lang))
+                    st.image(images["masked"], caption=get_text("vegetation_result", lang))
                 with col3:
-                    st.image(edges, caption="Edge Detection Result")
-                
-                coverage = (veg_pixels / total_pixels) * 100
+                    st.image(images["inner"], caption="Inner Area Result")
+                with col4:
+                    st.image(images["edges"], caption="Edge Detection Result")
                 
                 metrics_cols = st.columns(4)
                 with metrics_cols[0]:
-                    st.metric(get_text("coverage_rate", lang), f"{coverage:.2f}%")
+                    st.metric(get_text("coverage_rate", lang), 
+                             f"{(pixels['veg'] / pixels['total']) * 100:.2f}%")
                 with metrics_cols[1]:
-                    st.metric(get_text("veg_pixels", lang), f"{veg_pixels:,}")
+                    st.metric(get_text("veg_pixels", lang), f"{pixels['veg']:,}")
                 with metrics_cols[2]:
-                    st.metric(get_text("total_pixels", lang), f"{total_pixels:,}")
+                    st.metric("Inner Pixels", f"{pixels['inner']:,}")
                 with metrics_cols[3]:
-                    st.metric("PAR (Perimeter Area Ratio)", f"{par:.4f}")
-
-                if indices["vegetation"]:
+                    st.metric("PAR", f"{par['value']:.4f}")
+                
+                if indices:
                     st.subheader(get_text("index_results", lang))
-                    index_cols = st.columns(2)
-                    with index_cols[0]:
-                        st.write(get_text("veg_area_values", lang))
+                    mode_cols = st.columns(3)
+                    with mode_cols[0]:
+                        st.write("Raw Image Values:")
                         for key in selected_indices:
-                            st.write(f"{ALGORITHMS[key][0]}: {indices['vegetation'][key]:.4f}")
-                    with index_cols[1]:
-                        st.write(get_text("whole_area_values", lang))
+                            st.write(f"{ALGORITHMS[key][0]}: {indices['raw'][key]:.4f}")
+                    with mode_cols[1]:
+                        st.write("Masked Area Values:")
                         for key in selected_indices:
-                            st.write(f"{ALGORITHMS[key][0]}: {indices['whole'][key]:.4f}")
+                            st.write(f"{ALGORITHMS[key][0]}: {indices['masked'][key]:.4f}")
+                    with mode_cols[2]:
+                        st.write("Inner Area Values:")
+                        for key in selected_indices:
+                            st.write(f"{ALGORITHMS[key][0]}: {indices['inner'][key]:.4f}")
             
             except Exception as e:
-                st.error(f"{get_text('error_occurred', lang)} {str(e)}")
-    
+                st.error(f"{get_text('error_occurred', lang)} {str(e)}")    
+
     with tab2:
         uploaded_files = st.file_uploader(
             get_text("upload_multiple", lang),
