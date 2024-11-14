@@ -250,7 +250,7 @@ def process_single_image(
     del image_float
     gc.collect()
     
-    # 正規化
+    # 正規化 (INTは除外)
     total = r + g + b
     nr = np.divide(r, total, out=np.zeros_like(r), where=total!=0)
     ng = np.divide(g, total, out=np.zeros_like(g), where=total!=0)
@@ -277,14 +277,18 @@ def process_single_image(
     
     # 選択された指数の計算（ベクトル化処理）
     for index_name in selected_indices:
-        if index_name in ALGORITHMS:
+        if index_name == "INT":
+            # INTは正規化前の値を使用
+            value = ALGORITHMS[index_name][1](r, g, b)
+        elif index_name in ALGORITHMS:
             value = ALGORITHMS[index_name][1](nr, ng, nb)
-            indices_result["whole"][index_name] = float(np.mean(value))
-            if veg_pixels > 0:
-                indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
-            else:
-                indices_result["vegetation"][index_name] = 0.0
-            del value
+            
+        indices_result["whole"][index_name] = float(np.mean(value))
+        if veg_pixels > 0:
+            indices_result["vegetation"][index_name] = float(np.mean(value[mask_bool]))
+        else:
+            indices_result["vegetation"][index_name] = 0.0
+        del value
     
     return binary_mask, veg_pixels, total_pixels, indices_result
 
