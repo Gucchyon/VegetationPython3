@@ -48,7 +48,7 @@ TRANSLATIONS = {
         - Multiple calculation modes:
           - Raw values: Calculated from the original image
           - Masked values: Reduces the influence of background soil and water by focusing only on vegetation areas
-        - Edge detection and Perimeter Area Ratio (PAR) calculation to evaluate leaf size and fineness
+        - Edge detection and Perimeter Area Ratio (PAR) calculation to evaluate leaf thinness and size
         - Support for batch processing of multiple images
         - Detailed analysis results with CSV export
         
@@ -62,7 +62,7 @@ TRANSLATIONS = {
         2. **Single Image Analysis**
            - Upload a single image
            - View the original image, vegetation mask, and edge detection results
-           - See vegetation coverage and PAR (higher PAR indicates finer or smaller leaves)
+           - See vegetation coverage and PAR (higher PAR indicates thinner or smaller leaves)
            - Compare indices between raw image and masked areas
         
         3. **Batch Processing**
@@ -73,7 +73,7 @@ TRANSLATIONS = {
         **Tips:**
         - For best results, use clear images with good contrast
         - Use Otsu's method first, then switch to manual threshold if needed
-        - Higher PAR values indicate finer leaf structure or smaller leaves
+        - Higher PAR values indicate thinner leaf structure or smaller leaves
         - Masked values are useful when background (soil, water) might affect the analysis
         """,    
     },
@@ -117,7 +117,7 @@ TRANSLATIONS = {
         - Múltiples modos de cálculo:
           - Valores brutos: Calculados de la imagen original
           - Valores enmascarados: Reduce la influencia del suelo y agua de fondo al enfocarse solo en áreas de vegetación
-        - Detección de bordes y cálculo de PAR para evaluar el tamaño y finura de las hojas
+        - Detección de bordes y cálculo de PAR para evaluar la delgadez y el tamaño de las hojas
         - Soporte para procesamiento por lotes de múltiples imágenes
         - Resultados detallados con exportación a CSV
         
@@ -131,7 +131,7 @@ TRANSLATIONS = {
         2. **Análisis de Imagen Individual**
            - Suba una imagen
            - Vea la imagen original, máscara de vegetación y resultados de detección de bordes
-           - Observe la cobertura vegetal y PAR (PAR más alto indica hojas más finas o pequeñas)
+           - Observe la cobertura vegetal y PAR (PAR más alto indica hojas más delgadas o pequeñas)
            - Compare índices entre imagen bruta y áreas enmascaradas
         
         3. **Procesamiento por Lotes**
@@ -142,7 +142,7 @@ TRANSLATIONS = {
         **Consejos:**
         - Para mejores resultados, use imágenes claras con buen contraste
         - Use primero el método de Otsu, luego cambie al umbral manual si es necesario
-        - Valores PAR más altos indican estructura de hojas más finas o hojas más pequeñas
+        - Valores PAR más altos indican hojas más delgadas o más pequeñas
         - Los valores enmascarados son útiles cuando el fondo (suelo, agua) podría afectar el análisis
         """,       
     },
@@ -186,7 +186,7 @@ TRANSLATIONS = {
         - 複数の計算モード：
           - 元画像の値：画像全体から計算
           - マスク値：植生領域のみを対象とし、背景の土壌や水の影響を低減
-        - エッジ検出と周長面積比（PAR）による葉の大きさや細かさの評価
+        - エッジ検出と周長面積比（PAR）による葉の細さや小ささの評価
         - 複数画像の一括処理機能
         - 詳細な解析結果のCSVエクスポート
 
@@ -200,7 +200,7 @@ TRANSLATIONS = {
         2. **単一画像解析**
            - 画像をアップロード
            - 元画像、植生マスク、エッジ検出結果を確認
-           - 植生被覆率とPAR（高いPARは葉が細かいまたは小さいことを示す）を確認
+           - 植生被覆率とPAR（高いPARは葉が細いまたは小さいことを示す）を確認
            - 元画像とマスク領域での指数値を比較
 
         3. **バッチ処理**
@@ -211,7 +211,7 @@ TRANSLATIONS = {
         **ヒント：**
         - より良い結果を得るために、コントラストの良い鮮明な画像を使用してください
         - まず大津の方法を試し、必要に応じて手動閾値に切り替えてください
-        - PAR値が高いほど、葉が細かい、または小さいことを示します
+        - PAR値が高いほど、葉が細いまたは小さいことを示します
         - 背景（土壌や水）が解析に影響を与える可能性がある場合、マスク値が有用です
         """,    
     }
