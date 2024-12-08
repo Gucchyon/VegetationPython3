@@ -50,12 +50,11 @@ TRANSLATIONS = {
         "roi_top": "Top",
         "roi_right": "Right",
         "roi_bottom": "Bottom",
-        "about_description": """
         "preview_title": "Processing Preview (First Image)",
         "preview_description": "Preview of processing results for the first image. Please confirm if these results meet your expectations before proceeding with batch processing.",
         "preview_metrics": "Preview Metrics",
         "roi_warning": "No ROI selected. Will process entire image.",
-
+        "about_description": """
         This application analyzes vegetation in images using various vegetation indices. You can process both single images and multiple images in batch mode.
         
         **Key Features:**
