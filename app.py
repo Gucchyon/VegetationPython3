@@ -570,12 +570,12 @@ def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, i
     col1, col2 = st.columns(2)
     
     with col1:
-        x1 = st.slider("左端 (X1)", 0, w-1, st.session_state.batch_roi_x1, key="batch_roi_x1_slider")
-        y1 = st.slider("上端 (Y1)", 0, h-1, st.session_state.batch_roi_y1, key="batch_roi_y1_slider")
+        x1 = st.slider(get_text("roi_left", lang), 0, w-1, st.session_state.batch_roi_x1, key="batch_roi_x1_slider")
+        y1 = st.slider(get_text("roi_top", lang), 0, h-1, st.session_state.batch_roi_y1, key="batch_roi_y1_slider")
     
     with col2:
-        x2 = st.slider("右端 (X2)", x1, w-1, st.session_state.batch_roi_x2, key="batch_roi_x2_slider")
-        y2 = st.slider("下端 (Y2)", y1, h-1, st.session_state.batch_roi_y2, key="batch_roi_y2_slider")
+        x2 = st.slider(get_text("roi_right", lang), x1, w-1, st.session_state.batch_roi_x2, key="batch_roi_x2_slider")
+        y2 = st.slider(get_text("roi_bottom", lang), y1, h-1, st.session_state.batch_roi_y2, key="batch_roi_y2_slider")
     
     # セッション状態の更新
     st.session_state.batch_roi_x1 = x1
@@ -627,7 +627,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
     
     # ROI選択UI用の画像表示
-    display_image = resize_for_display(first_image, 600)
+    display_image = resize_for_display(first_image, 300)
     st.subheader(get_text("roi_selection", lang))
     st.image(display_image, caption=get_text("original_image", lang), use_column_width=True)
     roi = select_roi_for_batch(display_image, lang)
