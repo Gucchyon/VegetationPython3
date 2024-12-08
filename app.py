@@ -41,6 +41,8 @@ TRANSLATIONS = {
             "help": "Help",
         "about_title": "About This Application",
         "about_description": """
+        "roi_selection": "Selección de Región de Interés",
+
         This application analyzes vegetation in images using various vegetation indices. You can process both single images and multiple images in batch mode.
         
         **Key Features:**
@@ -114,6 +116,11 @@ TRANSLATIONS = {
         "apply_roi": "Appliquer la Sélection",
         "reset_roi": "Réinitialiser la Sélection",
         "roi_instructions": "Cliquez et faites glisser pour sélectionner la zone, puis cliquez sur 'Appliquer la Sélection'",
+        "roi_selection": "Region of Interest Selection",
+        "select_roi": "Select Region of Interest",
+        "apply_roi": "Apply Selection",
+        "reset_roi": "Reset Selection",
+        "roi_instructions": "Click and drag to select area, then click 'Apply Selection'",
         "about_description": """
         Cette application analyse la végétation dans les images en utilisant divers indices de végétation. Vous pouvez traiter des images uniques ou multiples en mode lot.
         
@@ -174,6 +181,10 @@ TRANSLATIONS = {
         "automatic": "Automático",
             "help": "Ayuda",
         "about_title": "Acerca de esta Aplicación",
+        "select_roi": "Seleccionar Región de Interés",
+        "apply_roi": "Aplicar Selección",
+        "reset_roi": "Restablecer Selección",
+        "roi_instructions": "Haga clic y arrastre para seleccionar el área, luego haga clic en 'Aplicar Selección'",
         "about_description": """
         Esta aplicación analiza la vegetación en imágenes utilizando varios índices de vegetación. Puede procesar tanto imágenes individuales como múltiples imágenes en modo por lotes.
         
@@ -243,6 +254,11 @@ TRANSLATIONS = {
         "automatic": "自動",
             "help": "ヘルプ",
         "about_title": "このアプリケーションについて",
+        "roi_selection": "関心領域の選択",
+        "select_roi": "関心領域を選択",
+        "apply_roi": "選択を適用",
+        "reset_roi": "選択をリセット",
+        "roi_instructions": "クリックとドラッグで領域を選択し、「選択を適用」をクリックしてください",
         "about_description": """
         このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
 
