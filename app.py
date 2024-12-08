@@ -950,14 +950,21 @@ def main():
                 with roi_container:
                     st.subheader(get_text("roi_selection", lang))
                     
-                    # ROI選択の有効化チェックボックス
-                    enable_roi = st.checkbox(get_text("select_roi", lang), key='enable_roi')
+                    # 列を作成してボタンを横に並べる
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    
+                    with col1:
+                        # ROI選択の有効化チェックボックス
+                        enable_roi = st.checkbox(get_text("select_roi", lang), key='enable_roi')
                     
                     if enable_roi:
                         # ROI選択UIの表示
                         roi = interactive_roi_selection(image, lang)
+                        
                         if roi:
-                            st.session_state.roi = roi
+                            # 一時的なROIとして保存
+                            st.session_state.temp_roi = roi
+                            
                             # ROIの座標を表示
                             st.write(get_text("roi_coords", lang) + ":")
                             cols = st.columns(4)
@@ -969,12 +976,23 @@ def main():
                                 st.write(f"{get_text('roi_right', lang)}: {roi[2]}")
                             with cols[3]:
                                 st.write(f"{get_text('roi_bottom', lang)}: {roi[3]}")
-                    
-                    # ROIリセットボタン
-                    if st.button(get_text("reset_roi", lang)):
-                        st.session_state.roi = None
-                        st.session_state.roi_coords = None
-                        st.rerun()
+                        
+                        with col2:
+                            # 適用ボタン
+                            if st.button(get_text("apply_roi", lang), key='apply_roi'):
+                                if hasattr(st.session_state, 'temp_roi'):
+                                    st.session_state.roi = st.session_state.temp_roi
+                                    st.success("ROIが適用されました")
+                                    st.rerun()
+                        
+                        with col3:
+                            # リセットボタン
+                            if st.button(get_text("reset_roi", lang), key='reset_roi'):
+                                st.session_state.roi = None
+                                st.session_state.roi_coords = None
+                                if hasattr(st.session_state, 'temp_roi'):
+                                    del st.session_state.temp_roi
+                                st.rerun()
                 
                 # ROIの適用と処理
                 working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
@@ -984,6 +1002,7 @@ def main():
                     working_image, threshold_method, exg_threshold, selected_indices
                 )
                 
+                # 結果の表示
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.image(image, caption=get_text("original_image", lang))
@@ -1005,17 +1024,16 @@ def main():
                     st.subheader(get_text("index_results", lang))
                     mode_cols = st.columns(2)
                     with mode_cols[0]:
-                        st.write("Raw Image Values:")
+                        st.write(get_text("whole_area_values", lang))
                         for key in selected_indices:
                             st.write(f"{ALGORITHMS[key][0]}: {indices['raw'][key]:.4f}")
                     with mode_cols[1]:
-                        st.write("Masked Area Values:")
+                        st.write(get_text("veg_area_values", lang))
                         for key in selected_indices:
                             st.write(f"{ALGORITHMS[key][0]}: {indices['masked'][key]:.4f}")
             
             except Exception as e:
                 st.error(f"{get_text('error_occurred', lang)} {str(e)}")
-
     with tab2:  # Batch Processing tab
         uploaded_files = st.file_uploader(
             get_text("upload_multiple", lang),
