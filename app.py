@@ -600,7 +600,7 @@ def resize_for_display(image: np.ndarray, max_size: int = 400) -> np.ndarray:
     return image
 
 def display_analysis_images(original: np.ndarray, masked: np.ndarray, edges: np.ndarray, 
-                          lang: str, display_size: int = 400) -> None:
+                          lang: str, display_size: int = 300) -> None:  # サイズを300pxに変更
     """解析結果の画像を統一サイズで表示"""
     # 表示用にリサイズ
     original_display = resize_for_display(original, display_size)
@@ -627,7 +627,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
     
     # ROI選択UI用の画像表示
-    display_image = resize_for_display(first_image, 600)  # ROI選択用は少し大きめに
+    display_image = resize_for_display(first_image, 600)
     st.subheader(get_text("roi_selection", lang))
     st.image(display_image, caption=get_text("original_image", lang), use_column_width=True)
     roi = select_roi_for_batch(display_image, lang)
@@ -652,7 +652,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
         roi_image, threshold_method, exg_threshold, selected_indices
     )
     
-    # プレビュー結果の表示
+    # プレビュー結果の表示（標準サイズで表示）
     st.subheader(get_text("preview_title", lang))
     st.write(get_text("preview_description", lang))
     display_analysis_images(roi_image, preview_images["masked"], preview_images["edges"], lang)
@@ -834,16 +834,8 @@ def main():
                     working_image, threshold_method, exg_threshold, selected_indices
                 )
                 
-                # 統一された表示関数を使用
+                # 統一された表示関数を使用（重複表示を削除）
                 display_analysis_images(working_image, images["masked"], images["edges"], lang)
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.image(image, caption=get_text("original_image", lang))
-                with col2:
-                    st.image(images["masked"], caption=get_text("vegetation_result", lang))
-                with col3:
-                    st.image(images["edges"], caption="Edge Detection Result")
                 
                 metrics_cols = st.columns(3)
                 with metrics_cols[0]:
