@@ -355,33 +355,26 @@ class ROISelector:
             )
 
 def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
-    try:
-        selector = ROISelector()
-        window_name = "Select ROI"
-        cv2.namedWindow(window_name)
-        cv2.setMouseCallback(window_name, selector.mouse_callback)
-
-        while True:
-            img_copy = image.copy()
-            if selector.start_point and selector.end_point:
-                cv2.rectangle(img_copy, selector.start_point, selector.end_point, (0, 255, 0), 2)
-            
-            cv2.imshow(window_name, img_copy)
-            key = cv2.waitKey(1) & 0xFF
-            
-            if key == ord('q') or key == 27:  # ESC
-                break
-            elif key == ord('r'):  # Reset
-                selector.roi = None
-                selector.start_point = None
-                selector.end_point = None
-    except Exception as e:
-        st.error(f"ROI selection failed: {str(e)}")
-        return None
-    finally:
-        cv2.destroyAllWindows()
+    """Streamlitを使用してROIを選択する"""
+    h, w = image.shape[:2]
     
-    return selector.roi
+    st.write("ROIの座標を指定してください：")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        x1 = st.slider("左端 (X1)", 0, w-1, 0)
+        y1 = st.slider("上端 (Y1)", 0, h-1, 0)
+    
+    with col2:
+        x2 = st.slider("右端 (X2)", x1, w-1, w-1)
+        y2 = st.slider("下端 (Y2)", y1, h-1, h-1)
+    
+    # ROIを可視化
+    img_copy = image.copy()
+    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    st.image(img_copy, caption="選択されたROI")
+    
+    return (x1, y1, x2, y2)
 
 def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
     if roi is None:
