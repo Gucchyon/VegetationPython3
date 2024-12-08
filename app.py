@@ -358,21 +358,37 @@ def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
     """Streamlitを使用してROIを選択する"""
     h, w = image.shape[:2]
     
+    # セッション状態の初期化
+    if 'roi_x1' not in st.session_state:
+        st.session_state.roi_x1 = 0
+    if 'roi_y1' not in st.session_state:
+        st.session_state.roi_y1 = 0
+    if 'roi_x2' not in st.session_state:
+        st.session_state.roi_x2 = w-1
+    if 'roi_y2' not in st.session_state:
+        st.session_state.roi_y2 = h-1
+    
     st.write("ROIの座標を指定してください：")
     col1, col2 = st.columns(2)
     
     with col1:
-        x1 = st.slider("左端 (X1)", 0, w-1, 0)
-        y1 = st.slider("上端 (Y1)", 0, h-1, 0)
+        x1 = st.slider("左端 (X1)", 0, w-1, st.session_state.roi_x1, key="roi_x1_slider")
+        y1 = st.slider("上端 (Y1)", 0, h-1, st.session_state.roi_y1, key="roi_y1_slider")
     
     with col2:
-        x2 = st.slider("右端 (X2)", x1, w-1, w-1)
-        y2 = st.slider("下端 (Y2)", y1, h-1, h-1)
+        x2 = st.slider("右端 (X2)", x1, w-1, st.session_state.roi_x2, key="roi_x2_slider")
+        y2 = st.slider("下端 (Y2)", y1, h-1, st.session_state.roi_y2, key="roi_y2_slider")
+    
+    # セッション状態の更新
+    st.session_state.roi_x1 = x1
+    st.session_state.roi_y1 = y1
+    st.session_state.roi_x2 = x2
+    st.session_state.roi_y2 = y2
     
     # ROIを可視化
     img_copy = image.copy()
     cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    st.image(img_copy, caption="選択されたROI")
+    st.image(img_copy, caption="選択されたROI", use_column_width=True)
     
     return (x1, y1, x2, y2)
 
@@ -619,11 +635,28 @@ def main():
                     
                     with roi_col1:
                         if st.button(get_text("select_roi", lang), key='select_roi_btn'):
-                            st.session_state.roi = select_roi(image)
+                            # ROI選択モードの切り替え
+                            if 'roi_selection_active' not in st.session_state:
+                                st.session_state.roi_selection_active = False
+                            st.session_state.roi_selection_active = not st.session_state.roi_selection_active
                     
                     with roi_col2:
                         if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
                             st.session_state.roi = None
+                            st.session_state.roi_selection_active = False
+                            # ROIスライダーの状態をリセット
+                            if 'roi_x1' in st.session_state:
+                                del st.session_state.roi_x1
+                            if 'roi_y1' in st.session_state:
+                                del st.session_state.roi_y1
+                            if 'roi_x2' in st.session_state:
+                                del st.session_state.roi_x2
+                            if 'roi_y2' in st.session_state:
+                                del st.session_state.roi_y2
+                
+                # ROI選択モードがアクティブな場合のみROI選択UIを表示
+                if 'roi_selection_active' in st.session_state and st.session_state.roi_selection_active:
+                    st.session_state.roi = select_roi(image)
                 
                 # ROIの適用と処理
                 working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
