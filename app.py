@@ -4,6 +4,10 @@ import base64
 from io import BytesIO
 from PIL import Image
 import numpy as np
+import cv2  # 追加
+import pandas as pd  # 追加
+from typing import List, Tuple, Dict  # 追加
+import gc  # 追加
 
 # 言語定義
 TRANSLATIONS = {
@@ -481,35 +485,46 @@ def convert_image_to_base64(image):
     return None
 
 def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
-    """インタラクティブなROI選択機能"""
-    # 画像をbase64エンコード
+    """インタラクティブなROI選択機能の改善版"""
     img_base64 = convert_image_to_base64(image)
     
-    # カスタムコンポーネントの作成
-    roi_component = create_interactive_roi_selector()
-    components.html(
-        f"""
-        {roi_component}
-        <script>
-            document.getElementById('sourceImage').src = 'data:image/png;base64,{img_base64}';
-        </script>
-        """,
-        height=600
-    )
-    
-    # ROIの値を受け取るためのセッション状態
     if 'roi_coords' not in st.session_state:
         st.session_state.roi_coords = None
+
+    # コンポーネントの作成前にキー設定
+    component_key = f"roi_selector_{id(image)}"
     
-    # JavaScriptからの更新を処理
-    if st.session_state.roi_coords:
-        roi = st.session_state.roi_coords
+    components.html(
+        f"""
+        {create_interactive_roi_selector()}
+        <script>
+            const img = document.getElementById('sourceImage');
+            img.src = 'data:image/png;base64,{img_base64}';
+            
+            // ROIの更新をStreamlitに送信
+            window.addEventListener('message', function(e) {{
+                if (e.data.type === 'roi_update') {{
+                    Streamlit.setComponentValue(e.data.roi);
+                }}
+            }}, false);
+        </script>
+        """,
+        height=600,
+        key=component_key
+    )
+    
+    # ROIの値を取得
+    roi_data = st.session_state.get('roi_coords')
+    if roi_data:
         h, w = image.shape[:2]
-        x1 = int(roi['x'] * w)
-        y1 = int(roi['y'] * h)
-        x2 = int((roi['x'] + roi['width']) * w)
-        y2 = int((roi['y'] + roi['height']) * h)
-        return (x1, y1, x2, y2)
+        try:
+            x1 = max(0, min(int(roi_data['x'] * w), w-1))
+            y1 = max(0, min(int(roi_data['y'] * h), h-1))
+            x2 = max(0, min(int((roi_data['x'] + roi_data['width']) * w), w-1))
+            y2 = max(0, min(int((roi_data['y'] + roi_data['height']) * h), h-1))
+            return (x1, y1, x2, y2)
+        except (KeyError, TypeError) as e:
+            st.error(f"ROI selection error: {str(e)}")
     
     return None
 
