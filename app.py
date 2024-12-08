@@ -957,6 +957,10 @@ def main():
                         # ROI選択の有効化チェックボックス
                         enable_roi = st.checkbox(get_text("select_roi", lang), key='enable_roi')
                     
+                    # ROI選択の状態管理
+                    if 'roi_applied' not in st.session_state:
+                        st.session_state.roi_applied = False
+                    
                     if enable_roi:
                         # ROI選択UIの表示
                         roi = interactive_roi_selection(image, lang)
@@ -982,6 +986,7 @@ def main():
                             if st.button(get_text("apply_roi", lang), key='apply_roi'):
                                 if hasattr(st.session_state, 'temp_roi'):
                                     st.session_state.roi = st.session_state.temp_roi
+                                    st.session_state.roi_applied = True
                                     st.success("ROIが適用されました")
                                     st.rerun()
                         
@@ -990,12 +995,16 @@ def main():
                             if st.button(get_text("reset_roi", lang), key='reset_roi'):
                                 st.session_state.roi = None
                                 st.session_state.roi_coords = None
+                                st.session_state.roi_applied = False
                                 if hasattr(st.session_state, 'temp_roi'):
                                     del st.session_state.temp_roi
                                 st.rerun()
                 
                 # ROIの適用と処理
-                working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
+                if st.session_state.get('roi_applied', False) and st.session_state.roi:
+                    working_image = apply_roi(image, st.session_state.roi)
+                else:
+                    working_image = image
                 
                 # 処理結果の表示
                 images, pixels, indices, par = process_single_image(
@@ -1005,7 +1014,14 @@ def main():
                 # 結果の表示
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.image(image, caption=get_text("original_image", lang))
+                    if st.session_state.get('roi_applied', False) and st.session_state.roi:
+                        # ROIが適用されている場合は、元画像にROIを可視化
+                        x1, y1, x2, y2 = st.session_state.roi
+                        marked_image = image.copy()
+                        cv2.rectangle(marked_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        st.image(marked_image, caption=get_text("original_image", lang))
+                    else:
+                        st.image(image, caption=get_text("original_image", lang))
                 with col2:
                     st.image(images["masked"], caption=get_text("vegetation_result", lang))
                 with col3:
