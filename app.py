@@ -4,10 +4,10 @@ import base64
 from io import BytesIO
 from PIL import Image
 import numpy as np
-import cv2  # 追加
-import pandas as pd  # 追加
-from typing import List, Tuple, Dict  # 追加
-import gc  # 追加
+import cv2
+import pandas as pd
+from typing import List, Tuple, Dict
+import gc
 
 # 言語定義
 TRANSLATIONS = {
@@ -354,126 +354,123 @@ def resize_if_needed(image: np.ndarray, max_size: int = 1024) -> np.ndarray:
         return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
     return image
 
-def create_interactive_roi_selector():
-    """インタラクティブなROI選択のためのHTMLコンポーネントを作成"""
-    return """
-    <style>
-        .roi-container {
-            position: relative;
-            display: inline-block;
-        }
-        .roi-box {
-            position: absolute;
-            border: 2px solid #00ff00;
-            cursor: move;
-        }
-        .roi-resize-handle {
-            width: 10px;
-            height: 10px;
-            background-color: #00ff00;
-            position: absolute;
-            right: -5px;
-            bottom: -5px;
-            cursor: se-resize;
-        }
-    </style>
+def create_interactive_roi_selector(img_base64: str):
+    """Create an interactive ROI selector component"""
+    return components.html(
+        f"""
+        <style>
+            .roi-container {{
+                position: relative;
+                display: inline-block;
+            }}
+            .roi-box {{
+                position: absolute;
+                border: 2px solid #00ff00;
+                cursor: move;
+            }}
+            .roi-resize-handle {{
+                width: 10px;
+                height: 10px;
+                background-color: #00ff00;
+                position: absolute;
+                right: -5px;
+                bottom: -5px;
+                cursor: se-resize;
+            }}
+        </style>
 
-    <div class="roi-container" id="roiContainer">
-        <img id="sourceImage" style="max-width: 100%;" />
-        <div class="roi-box" id="roiBox">
-            <div class="roi-resize-handle" id="roiHandle"></div>
+        <div class="roi-container" id="roiContainer">
+            <img id="sourceImage" src="data:image/png;base64,{img_base64}" style="max-width: 100%;" />
+            <div class="roi-box" id="roiBox">
+                <div class="roi-resize-handle" id="roiHandle"></div>
+            </div>
         </div>
-    </div>
 
-    <script>
-        // ROIの状態管理
-        let isDragging = false;
-        let isResizing = false;
-        let currentX;
-        let currentY;
-        let initialX;
-        let initialY;
-        let xOffset = 0;
-        let yOffset = 0;
-        let initialWidth;
-        let initialHeight;
+        <script>
+            // ROI state management
+            let isDragging = false;
+            let isResizing = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+            let initialWidth;
+            let initialHeight;
 
-        // DOM要素の取得
-        const container = document.getElementById("roiContainer");
-        const roiBox = document.getElementById("roiBox");
-        const handle = document.getElementById("roiHandle");
-        const img = document.getElementById("sourceImage");
+            // Get DOM elements
+            const container = document.getElementById("roiContainer");
+            const roiBox = document.getElementById("roiBox");
+            const handle = document.getElementById("roiHandle");
+            const img = document.getElementById("sourceImage");
 
-        // イベントリスナーの設定
-        roiBox.addEventListener("mousedown", startDragging);
-        handle.addEventListener("mousedown", startResizing);
-        document.addEventListener("mousemove", drag);
-        document.addEventListener("mouseup", stopDragging);
+            // Add event listeners
+            roiBox.addEventListener("mousedown", startDragging);
+            handle.addEventListener("mousedown", startResizing);
+            document.addEventListener("mousemove", drag);
+            document.addEventListener("mouseup", stopDragging);
 
-        // ドラッグ開始
-        function startDragging(e) {
-            if (e.target === handle) return;
-            isDragging = true;
-            initialX = e.clientX - xOffset;
-            initialY = e.clientY - yOffset;
-        }
+            function startDragging(e) {{
+                if (e.target === handle) return;
+                isDragging = true;
+                initialX = e.clientX - xOffset;
+                initialY = e.clientY - yOffset;
+            }}
 
-        // リサイズ開始
-        function startResizing(e) {
-            isResizing = true;
-            initialWidth = roiBox.offsetWidth;
-            initialHeight = roiBox.offsetHeight;
-            initialX = e.clientX;
-            initialY = e.clientY;
-            e.stopPropagation();
-        }
+            function startResizing(e) {{
+                isResizing = true;
+                initialWidth = roiBox.offsetWidth;
+                initialHeight = roiBox.offsetHeight;
+                initialX = e.clientX;
+                initialY = e.clientY;
+                e.stopPropagation();
+            }}
 
-        // ドラッグとリサイズの処理
-        function drag(e) {
-            if (isDragging) {
-                e.preventDefault();
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
+            function drag(e) {{
+                if (isDragging) {{
+                    e.preventDefault();
+                    currentX = e.clientX - initialX;
+                    currentY = e.clientY - initialY;
 
-                xOffset = currentX;
-                yOffset = currentY;
+                    xOffset = currentX;
+                    yOffset = currentY;
 
-                setTranslate(currentX, currentY, roiBox);
-            } else if (isResizing) {
-                e.preventDefault();
-                const width = initialWidth + (e.clientX - initialX);
-                const height = initialHeight + (e.clientY - initialY);
+                    setTranslate(currentX, currentY, roiBox);
+                }} else if (isResizing) {{
+                    e.preventDefault();
+                    const width = initialWidth + (e.clientX - initialX);
+                    const height = initialHeight + (e.clientY - initialY);
 
-                roiBox.style.width = `${width}px`;
-                roiBox.style.height = `${height}px`;
-            }
-        }
+                    roiBox.style.width = `${{width}}px`;
+                    roiBox.style.height = `${{height}}px`;
+                }}
+            }}
 
-        // ドラッグ終了
-        function stopDragging() {
-            isDragging = false;
-            isResizing = false;
-            // ROIの位置とサイズを親コンポーネントに通知
-            const rect = roiBox.getBoundingClientRect();
-            const imgRect = img.getBoundingClientRect();
-            const roi = {
-                x: (rect.left - imgRect.left) / img.width,
-                y: (rect.top - imgRect.top) / img.height,
-                width: rect.width / img.width,
-                height: rect.height / img.height
-            };
-            // Streamlitに値を送信
-            window.parent.postMessage({
-                type: "roi_update",
-                roi: roi
-            }, "*");
-        }
+            function stopDragging() {{
+                isDragging = false;
+                isResizing = false;
+                const rect = roiBox.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                const roi = {{
+                    x: (rect.left - imgRect.left) / img.width,
+                    y: (rect.top - imgRect.top) / img.height,
+                    width: rect.width / img.width,
+                    height: rect.height / img.height
+                }};
+                window.parent.postMessage({{
+                    type: "roi_update",
+                    roi: roi
+                }}, "*");
+            }}
 
-        function setTranslate(xPos, yPos, el) {
-            el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
-        }
-    </script>
-    """
+            function setTranslate(xPos, yPos, el) {{
+                el.style.transform = `translate3d(${{xPos}}px, ${{yPos}}px, 0)`;
+            }}
+        </script>
+        """,
+        height=600
+    )
 
 def convert_image_to_base64(image):
     """numpy配列をbase64エンコードされた画像に変換"""
@@ -485,35 +482,16 @@ def convert_image_to_base64(image):
     return None
 
 def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
-    """インタラクティブなROI選択機能の改善版"""
+    """Improved interactive ROI selection function"""
     img_base64 = convert_image_to_base64(image)
     
     if 'roi_coords' not in st.session_state:
         st.session_state.roi_coords = None
-
-    # コンポーネントの作成前にキー設定
-    component_key = f"roi_selector_{id(image)}"
     
-    components.html(
-        f"""
-        {create_interactive_roi_selector()}
-        <script>
-            const img = document.getElementById('sourceImage');
-            img.src = 'data:image/png;base64,{img_base64}';
-            
-            // ROIの更新をStreamlitに送信
-            window.addEventListener('message', function(e) {{
-                if (e.data.type === 'roi_update') {{
-                    Streamlit.setComponentValue(e.data.roi);
-                }}
-            }}, false);
-        </script>
-        """,
-        height=600,
-        key=component_key
-    )
+    # Create the component without a key argument
+    create_interactive_roi_selector(img_base64)
     
-    # ROIの値を取得
+    # Get ROI values
     roi_data = st.session_state.get('roi_coords')
     if roi_data:
         h, w = image.shape[:2]
