@@ -314,6 +314,81 @@ def resize_if_needed(image: np.ndarray, max_size: int = 1024) -> np.ndarray:
         return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
     return image
 
+
+class ROISelector:
+    def __init__(self):
+        self.roi = None
+        self.drawing = False
+        self.start_point = None
+        self.end_point = None
+
+    def mouse_callback(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawing = True
+            self.start_point = (x, y)
+            self.end_point = (x, y)
+        elif event == cv2.EVENT_MOUSEMOVE and self.drawing:
+            self.end_point = (x, y)
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.drawing = False
+            self.roi = (
+                min(self.start_point[0], self.end_point[0]),
+                min(self.start_point[1], self.end_point[1]),
+                max(self.start_point[0], self.end_point[0]),
+                max(self.start_point[1], self.end_point[1])
+            )
+
+def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
+    try:
+        selector = ROISelector()
+        window_name = "Select ROI"
+        cv2.namedWindow(window_name)
+        cv2.setMouseCallback(window_name, selector.mouse_callback)
+
+        while True:
+            img_copy = image.copy()
+            if selector.start_point and selector.end_point:
+                cv2.rectangle(img_copy, selector.start_point, selector.end_point, (0, 255, 0), 2)
+            
+            cv2.imshow(window_name, img_copy)
+            key = cv2.waitKey(1) & 0xFF
+            
+            if key == ord('q') or key == 27:  # ESC
+                break
+            elif key == ord('r'):  # Reset
+                selector.roi = None
+                selector.start_point = None
+                selector.end_point = None
+    except Exception as e:
+        st.error(f"ROI selection failed: {str(e)}")
+        return None
+    finally:
+        cv2.destroyAllWindows()
+    
+    return selector.roi
+
+def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
+    if roi is None:
+        return image
+    
+    try:
+        x1, y1, x2, y2 = roi
+        # 範囲チェック
+        h, w = image.shape[:2]
+        x1 = max(0, min(x1, w-1))
+        x2 = max(0, min(x2, w-1))
+        y1 = max(0, min(y1, h-1))
+        y2 = max(0, min(y2, h-1))
+        
+        # 正しい順序を確保
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        
+        return image[y1:y2, x1:x2]
+    except Exception as e:
+        st.error(f"Failed to apply ROI: {str(e)}")
+        return image
+
 @st.cache_data(max_entries=10)
 def process_single_image(
     image: np.ndarray,
@@ -453,59 +528,6 @@ def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indi
             continue
             
     return results
-
-class ROISelector:
-    def __init__(self):
-        self.roi = None
-        self.drawing = False
-        self.start_point = None
-        self.end_point = None
-
-    def mouse_callback(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self.drawing = True
-            self.start_point = (x, y)
-            self.end_point = (x, y)
-        elif event == cv2.EVENT_MOUSEMOVE and self.drawing:
-            self.end_point = (x, y)
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing = False
-            self.roi = (
-                min(self.start_point[0], self.end_point[0]),
-                min(self.start_point[1], self.end_point[1]),
-                max(self.start_point[0], self.end_point[0]),
-                max(self.start_point[1], self.end_point[1])
-            )
-
-def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
-    selector = ROISelector()
-    window_name = "Select ROI"
-    cv2.namedWindow(window_name)
-    cv2.setMouseCallback(window_name, selector.mouse_callback)
-
-    while True:
-        img_copy = image.copy()
-        if selector.start_point and selector.end_point:
-            cv2.rectangle(img_copy, selector.start_point, selector.end_point, (0, 255, 0), 2)
-        
-        cv2.imshow(window_name, img_copy)
-        key = cv2.waitKey(1) & 0xFF
-        
-        if key == ord('q') or key == 27:  # ESC
-            break
-        elif key == ord('r'):  # Reset
-            selector.roi = None
-            selector.start_point = None
-            selector.end_point = None
-    
-    cv2.destroyAllWindows()
-    return selector.roi
-
-def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
-    if roi is None:
-        return image
-    x1, y1, x2, y2 = roi
-    return image[y1:y2, x1:x2]
 
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
