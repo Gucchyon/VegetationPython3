@@ -41,10 +41,15 @@ TRANSLATIONS = {
             "help": "Help",
         "about_title": "About This Application",
         "roi_selection": "Region of Interest Selection",
-        "select_roi": "Select Region of Interest",
-        "apply_roi": "Apply Selection",
-        "reset_roi": "Reset Selection",
-        "roi_instructions": "Click and drag to select area, then click 'Apply Selection'",
+        "select_roi": "Select ROI",
+        "apply_roi": "Apply ROI",
+        "reset_roi": "Reset ROI",
+        "roi_instructions": "Click and drag to select area. Press Enter to confirm, ESC to cancel.",
+        "roi_coords": "ROI Coordinates",
+        "roi_left": "Left",
+        "roi_top": "Top",
+        "roi_right": "Right",
+        "roi_bottom": "Bottom",
         "about_description": """
         "roi_selection": "Selección de Región de Interés",
 
@@ -116,11 +121,16 @@ TRANSLATIONS = {
         "automatic": "Automatique",
         "help": "Aide",
         "about_title": "À Propos de cette Application",
-        "roi_selection": "Sélection de la Zone d'Intérêt",
-        "select_roi": "Sélectionner la Zone d'Intérêt",
-        "apply_roi": "Appliquer la Sélection",
-        "reset_roi": "Réinitialiser la Sélection",
-        "roi_instructions": "Cliquez et faites glisser pour sélectionner la zone, puis cliquez sur 'Appliquer la Sélection'",
+        "roi_selection": "Sélection de la Région d'Intérêt",
+        "select_roi": "Sélectionner ROI",
+        "apply_roi": "Appliquer ROI",
+        "reset_roi": "Réinitialiser ROI",
+        "roi_instructions": "Cliquez et faites glisser pour sélectionner la zone. Appuyez sur Entrée pour confirmer, Échap pour annuler.",
+        "roi_coords": "Coordonnées ROI",
+        "roi_left": "Gauche",
+        "roi_top": "Haut",
+        "roi_right": "Droite",
+        "roi_bottom": "Bas",
         "about_description": """
         Cette application analyse la végétation dans les images en utilisant divers indices de végétation. Vous pouvez traiter des images uniques ou multiples en mode lot.
         
@@ -181,10 +191,16 @@ TRANSLATIONS = {
         "automatic": "Automático",
             "help": "Ayuda",
         "about_title": "Acerca de esta Aplicación",
-        "select_roi": "Seleccionar Región de Interés",
-        "apply_roi": "Aplicar Selección",
-        "reset_roi": "Restablecer Selección",
-        "roi_instructions": "Haga clic y arrastre para seleccionar el área, luego haga clic en 'Aplicar Selección'",
+        "roi_selection": "Selección de Región de Interés",
+        "select_roi": "Seleccionar ROI",
+        "apply_roi": "Aplicar ROI",
+        "reset_roi": "Restablecer ROI",
+        "roi_instructions": "Haga clic y arrastre para seleccionar el área. Presione Enter para confirmar, ESC para cancelar.",
+        "roi_coords": "Coordenadas ROI",
+        "roi_left": "Izquierda",
+        "roi_top": "Superior",
+        "roi_right": "Derecha",
+        "roi_bottom": "Inferior",
         "about_description": """
         Esta aplicación analiza la vegetación en imágenes utilizando varios índices de vegetación. Puede procesar tanto imágenes individuales como múltiples imágenes en modo por lotes.
         
@@ -255,10 +271,15 @@ TRANSLATIONS = {
             "help": "ヘルプ",
         "about_title": "このアプリケーションについて",
         "roi_selection": "関心領域の選択",
-        "select_roi": "関心領域を選択",
+        "select_roi": "領域を選択",
         "apply_roi": "選択を適用",
         "reset_roi": "選択をリセット",
-        "roi_instructions": "クリックとドラッグで領域を選択し、「選択を適用」をクリックしてください",
+        "roi_instructions": "クリックとドラッグで領域を選択。Enterで確定、ESCでキャンセル。",
+        "roi_coords": "ROI座標",
+        "roi_left": "左端",
+        "roi_top": "上端",
+        "roi_right": "右端",
+        "roi_bottom": "下端"
         "about_description": """
         このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
 
@@ -330,21 +351,28 @@ def resize_if_needed(image: np.ndarray, max_size: int = 1024) -> np.ndarray:
         return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
     return image
 
-
 class ROISelector:
     def __init__(self):
         self.roi = None
         self.drawing = False
         self.start_point = None
         self.end_point = None
+        self.temp_image = None
 
     def mouse_callback(self, event, x, y, flags, param):
+        image = self.temp_image.copy()
+        
         if event == cv2.EVENT_LBUTTONDOWN:
             self.drawing = True
             self.start_point = (x, y)
             self.end_point = (x, y)
+        
         elif event == cv2.EVENT_MOUSEMOVE and self.drawing:
             self.end_point = (x, y)
+            # 選択範囲を表示
+            cv2.rectangle(image, self.start_point, self.end_point, (0, 255, 0), 2)
+            cv2.imshow('ROI Selection', image)
+        
         elif event == cv2.EVENT_LBUTTONUP:
             self.drawing = False
             self.roi = (
@@ -353,6 +381,8 @@ class ROISelector:
                 max(self.start_point[0], self.end_point[0]),
                 max(self.start_point[1], self.end_point[1])
             )
+            cv2.rectangle(image, (self.roi[0], self.roi[1]), (self.roi[2], self.roi[3]), (0, 255, 0), 2)
+            cv2.imshow('ROI Selection', image)
 
 def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
     """Streamlitを使用してROIを選択する"""
@@ -506,6 +536,32 @@ def process_single_image(
     }
     
     return images, pixels, indices_result, par
+
+def select_roi_interactive(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
+    """インタラクティブなROI選択機能"""
+    selector = ROISelector()
+    selector.temp_image = image.copy()
+    window_name = get_text("roi_selection", lang)
+    
+    cv2.namedWindow(window_name)
+    cv2.setMouseCallback(window_name, selector.mouse_callback)
+    cv2.imshow(window_name, image)
+    
+    instructions = get_text("roi_instructions", lang)
+    st.write(instructions)
+    
+    while True:
+        key = cv2.waitKey(1) & 0xFF
+        if key == 13:  # Enterキーで確定
+            cv2.destroyAllWindows()
+            if selector.roi:
+                return selector.roi
+            break
+        elif key == 27:  # ESCキーでキャンセル
+            cv2.destroyAllWindows()
+            return None
+    
+    return None
 
 def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
     """バッチ処理用のROI選択関数"""
@@ -690,33 +746,42 @@ def main():
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                # ROI選択のコンテナを作成
+                # ROI選択のコンテナ
                 roi_container = st.container()
                 
                 with roi_container:
                     st.subheader(get_text("roi_selection", lang))
-                    roi_col1, roi_col2 = st.columns(2)
+                    roi_col1, roi_col2, roi_col3 = st.columns(3)
                     
                     with roi_col1:
                         if st.button(get_text("select_roi", lang), key='select_roi_btn'):
-                            # ROI選択モードの切り替え
-                            if 'roi_selection_active' not in st.session_state:
-                                st.session_state.roi_selection_active = False
-                            st.session_state.roi_selection_active = not st.session_state.roi_selection_active
+                            # インタラクティブROI選択の起動
+                            st.session_state.roi = select_roi_interactive(image, lang)
                     
                     with roi_col2:
                         if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
                             st.session_state.roi = None
-                            st.session_state.roi_selection_active = False
-                            # ROIスライダーの状態をリセット
-                            if 'roi_x1' in st.session_state:
-                                del st.session_state.roi_x1
-                            if 'roi_y1' in st.session_state:
-                                del st.session_state.roi_y1
-                            if 'roi_x2' in st.session_state:
-                                del st.session_state.roi_x2
-                            if 'roi_y2' in st.session_state:
-                                del st.session_state.roi_y2
+                    
+                    with roi_col3:
+                        # スライダーによる微調整機能の追加
+                        if st.checkbox(get_text("roi_coords", lang), key='show_roi_coords'):
+                            if st.session_state.roi:
+                                x1, y1, x2, y2 = st.session_state.roi
+                                h, w = image.shape[:2]
+                                
+                                x1 = st.slider(get_text("roi_left", lang), 0, w-1, x1)
+                                y1 = st.slider(get_text("roi_top", lang), 0, h-1, y1)
+                                x2 = st.slider(get_text("roi_right", lang), x1, w-1, x2)
+                                y2 = st.slider(get_text("roi_bottom", lang), y1, h-1, y2)
+                                
+                                st.session_state.roi = (x1, y1, x2, y2)
+                
+                # ROIのプレビューと処理
+                if st.session_state.roi:
+                    preview_img = image.copy()
+                    x1, y1, x2, y2 = st.session_state.roi
+                    cv2.rectangle(preview_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    st.image(preview_img, caption=get_text("roi_selection", lang))
                 
                 # ROI選択モードがアクティブな場合のみROI選択UIを表示
                 if 'roi_selection_active' in st.session_state and st.session_state.roi_selection_active:
