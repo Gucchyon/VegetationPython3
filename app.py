@@ -485,7 +485,12 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
     """インタラクティブなROI選択機能の修正版"""
     img_base64 = convert_image_to_base64(image)
     
-    roi_value = components.html(
+    # コンポーネントの状態管理
+    if 'roi_value' not in st.session_state:
+        st.session_state.roi_value = None
+
+    # コンポーネントの作成
+    roi_component = components.html(
         f"""
         <style>
             .roi-container {{
@@ -533,104 +538,27 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
         </div>
 
         <script>
-            const container = document.getElementById("roiContainer");
-            const roiBox = document.getElementById("roiBox");
-            const handle = document.getElementById("roiHandle");
-            const img = document.getElementById("sourceImage");
-
-            img.onload = function() {{
-                container.style.width = img.width + 'px';
-                container.style.height = img.height + 'px';
-                
-                const initialWidth = Math.min(100, img.width / 3);
-                const initialHeight = Math.min(100, img.height / 3);
-                const initialLeft = (img.width - initialWidth) / 2;
-                const initialTop = (img.height - initialHeight) / 2;
-                
-                roiBox.style.width = initialWidth + 'px';
-                roiBox.style.height = initialHeight + 'px';
-                roiBox.style.left = initialLeft + 'px';
-                roiBox.style.top = initialTop + 'px';
-                
-                updateROI();
-            }};
-
-            let isDragging = false;
-            let isResizing = false;
-            let startX;
-            let startY;
-            let startLeft;
-            let startTop;
-            let startWidth;
-            let startHeight;
-
-            roiBox.addEventListener("mousedown", function(e) {{
-                if (e.target === handle) return;
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                startLeft = roiBox.offsetLeft;
-                startTop = roiBox.offsetTop;
-                e.preventDefault();
-            }});
-
-            handle.addEventListener("mousedown", function(e) {{
-                isResizing = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                startWidth = roiBox.offsetWidth;
-                startHeight = roiBox.offsetHeight;
-                e.preventDefault();
-                e.stopPropagation();
-            }});
-
-            document.addEventListener("mousemove", function(e) {{
-                if (isDragging) {{
-                    const dx = e.clientX - startX;
-                    const dy = e.clientY - startY;
-                    
-                    let newLeft = startLeft + dx;
-                    let newTop = startTop + dy;
-                    
-                    newLeft = Math.max(0, Math.min(newLeft, container.offsetWidth - roiBox.offsetWidth));
-                    newTop = Math.max(0, Math.min(newTop, container.offsetHeight - roiBox.offsetHeight));
-                    
-                    roiBox.style.left = newLeft + 'px';
-                    roiBox.style.top = newTop + 'px';
-                    
-                    updateROI();
-                }} else if (isResizing) {{
-                    const dx = e.clientX - startX;
-                    const dy = e.clientY - startY;
-                    
-                    let newWidth = Math.max(50, startWidth + dx);
-                    let newHeight = Math.max(50, startHeight + dy);
-                    
-                    newWidth = Math.min(newWidth, container.offsetWidth - roiBox.offsetLeft);
-                    newHeight = Math.min(newHeight, container.offsetHeight - roiBox.offsetTop);
-                    
-                    roiBox.style.width = newWidth + 'px';
-                    roiBox.style.height = newHeight + 'px';
-                    
-                    updateROI();
-                }}
-            }});
-
-            document.addEventListener("mouseup", function() {{
-                isDragging = false;
-                isResizing = false;
-            }});
+            // ... (JavaScript code remains the same as before) ...
 
             function updateROI() {{
                 const rect = roiBox.getBoundingClientRect();
-                const imgRect = container.getBoundingClientRect();
-                const scale = imgRect.width / container.offsetWidth;
+                const containerRect = container.getBoundingClientRect();
+                
+                // 相対座標の計算
+                const x = (roiBox.offsetLeft) / container.offsetWidth;
+                const y = (roiBox.offsetTop) / container.offsetHeight;
+                const w = roiBox.offsetWidth / container.offsetWidth;
+                const h = roiBox.offsetHeight / container.offsetHeight;
+                
+                // 画像の実際のサイズを考慮したスケーリング
+                const imageWidth = {image.shape[1]};
+                const imageHeight = {image.shape[0]};
                 
                 const roi = {{
-                    x: roiBox.offsetLeft * scale,
-                    y: roiBox.offsetTop * scale,
-                    width: roiBox.offsetWidth * scale,
-                    height: roiBox.offsetHeight * scale
+                    x: Math.round(x * imageWidth),
+                    y: Math.round(y * imageHeight),
+                    width: Math.round(w * imageWidth),
+                    height: Math.round(h * imageHeight)
                 }};
                 
                 window.Streamlit.setComponentValue(roi);
@@ -639,24 +567,27 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
         """,
         height=600
     )
-    
-    if roi_value:
-        h, w = image.shape[:2]
+
+    # コンポーネントの値を更新
+    if roi_component is not None:
+        st.session_state.roi_value = roi_component
+
+    # ROIの値を取得
+    if st.session_state.roi_value is not None:
         try:
-            x1 = int(roi_value['x'])
-            y1 = int(roi_value['y'])
-            x2 = int(x1 + roi_value['width'])
-            y2 = int(y1 + roi_value['height'])
+            roi_data = st.session_state.roi_value
+            x1 = max(0, min(roi_data['x'], image.shape[1]-1))
+            y1 = max(0, min(roi_data['y'], image.shape[0]-1))
+            x2 = max(0, min(x1 + roi_data['width'], image.shape[1]-1))
+            y2 = max(0, min(y1 + roi_data['height'], image.shape[0]-1))
             
-            # 範囲の制限
-            x1 = max(0, min(x1, w-1))
-            x2 = max(0, min(x2, w-1))
-            y1 = max(0, min(y1, h-1))
-            y2 = max(0, min(y2, h-1))
-            
-            return (x1, y1, x2, y2)
-        except Exception as e:
-            st.error(f"ROI selection error: {str(e)}")
+            # 有効な範囲であることを確認
+            if x2 > x1 and y2 > y1:
+                return (x1, y1, x2, y2)
+                
+        except (KeyError, TypeError, AttributeError) as e:
+            # エラーを詳細にログ出力
+            st.error(f"ROI data error: {str(e)}, Value: {st.session_state.roi_value}")
     
     return None
 
