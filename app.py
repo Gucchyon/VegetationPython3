@@ -712,28 +712,28 @@ def process_single_image(
     threshold_method: str,
     exg_threshold: float,
     selected_indices: List[str],
-    roi: Tuple[int, int, int, int] = None
+    roi: Tuple[int, int, int, int] = None,
+    cache_key: str = None  # キャッシュ制御用のキー
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, int], Dict[str, Dict], Dict[str, float]]:
     """ROIを考慮した画像処理関数"""
-    try:
-        # ROIの適用
-        if roi is not None:
-            x1, y1, x2, y2 = roi
-            h, w = image.shape[:2]
-            
-            # 範囲チェック
-            x1 = max(0, min(x1, w-1))
-            x2 = max(0, min(x2, w-1))
-            y1 = max(0, min(y1, h-1))
-            y2 = max(0, min(y2, h-1))
-            
-            # 正しい順序を確保
-            x1, x2 = min(x1, x2), max(x1, x2)
-            y1, y2 = min(y1, y2), max(y1, y2)
-            
-            # ROIを適用
-            if x2 > x1 and y2 > y1:
-                image = image[y1:y2, x1:x2].copy()
+    # ROIの適用（必要な場合）
+    if roi is not None:
+        x1, y1, x2, y2 = roi
+        h, w = image.shape[:2]
+        
+        # 範囲チェック
+        x1 = max(0, min(x1, w-1))
+        x2 = max(0, min(x2, w-1))
+        y1 = max(0, min(y1, h-1))
+        y2 = max(0, min(y2, h-1))
+        
+        # 正しい順序を確保
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        
+        # ROIを適用
+        if x2 > x1 and y2 > y1:
+            image = image[y1:y2, x1:x2].copy()
     
         # リサイズ
         image = resize_if_needed(image)
@@ -954,6 +954,9 @@ def main():
     ])
     
     with tab1:  # Single Image tab
+        if 'roi_cache_key' not in st.session_state:
+            st.session_state.roi_cache_key = 0
+
         uploaded_file = st.file_uploader(
             get_text("upload_image", lang),
             type=["png", "jpg", "jpeg"],
@@ -1009,7 +1012,8 @@ def main():
                                 if hasattr(st.session_state, 'temp_roi'):
                                     st.session_state.roi = st.session_state.temp_roi
                                     st.session_state.roi_applied = True
-                                    st.success("ROIが適用されました")
+                                    # キャッシュキーを更新
+                                    st.session_state.roi_cache_key += 1
                                     st.rerun()
                         
                         with col3:
@@ -1020,19 +1024,20 @@ def main():
                                 st.session_state.roi_applied = False
                                 if hasattr(st.session_state, 'temp_roi'):
                                     del st.session_state.temp_roi
-                                st.experimental_rerun()
+                                # キャッシュキーを更新
+                                st.session_state.roi_cache_key += 1
+                                st.rerun()
                 
-                # キャッシュをクリアして再処理
-                if st.session_state.get('roi_applied', False):
-                    process_single_image.clear()
+                # 処理結果の表示（キャッシュキーを含める）
+                current_roi = st.session_state.roi if st.session_state.get('roi_applied', False) else None
                 
-                # 処理結果の表示
                 images, pixels, indices, par = process_single_image(
-                    image,
-                    threshold_method,
-                    exg_threshold,
-                    selected_indices,
-                    st.session_state.roi if st.session_state.get('roi_applied', False) else None
+                    image=image,
+                    threshold_method=threshold_method,
+                    exg_threshold=exg_threshold,
+                    selected_indices=selected_indices,
+                    roi=current_roi,
+                    cache_key=str(st.session_state.roi_cache_key)  # キャッシュキーを追加
                 )
                 
                 # 結果の表示
