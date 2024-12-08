@@ -51,7 +51,10 @@ TRANSLATIONS = {
         "roi_right": "Right",
         "roi_bottom": "Bottom",
         "about_description": """
-        "roi_selection": "Selección de Región de Interés",
+        "preview_title": "Processing Preview (First Image)",
+        "preview_description": "Preview of processing results for the first image. Please confirm if these results meet your expectations before proceeding with batch processing.",
+        "preview_metrics": "Preview Metrics",
+        "roi_warning": "No ROI selected. Will process entire image.",
 
         This application analyzes vegetation in images using various vegetation indices. You can process both single images and multiple images in batch mode.
         
@@ -131,6 +134,10 @@ TRANSLATIONS = {
         "roi_top": "Haut",
         "roi_right": "Droite",
         "roi_bottom": "Bas",
+        "preview_title": "Aperçu du Traitement (Première Image)",
+        "preview_description": "Aperçu des résultats de traitement pour la première image. Veuillez confirmer si ces résultats répondent à vos attentes avant de procéder au traitement par lots.",
+        "preview_metrics": "Métriques d'Aperçu",
+        "roi_warning": "Aucune ROI sélectionnée. L'image entière sera traitée.",
         "about_description": """
         Cette application analyse la végétation dans les images en utilisant divers indices de végétation. Vous pouvez traiter des images uniques ou multiples en mode lot.
         
@@ -201,6 +208,10 @@ TRANSLATIONS = {
         "roi_top": "Superior",
         "roi_right": "Derecha",
         "roi_bottom": "Inferior",
+        "preview_title": "Vista Previa del Procesamiento (Primera Imagen)",
+        "preview_description": "Vista previa de los resultados del procesamiento para la primera imagen. Por favor, confirme si estos resultados cumplen con sus expectativas antes de proceder con el procesamiento por lotes.",
+        "preview_metrics": "Métricas de Vista Previa",
+        "roi_warning": "No se seleccionó ROI. Se procesará la imagen completa.",
         "about_description": """
         Esta aplicación analiza la vegetación en imágenes utilizando varios índices de vegetación. Puede procesar tanto imágenes individuales como múltiples imágenes en modo por lotes.
         
@@ -280,6 +291,10 @@ TRANSLATIONS = {
         "roi_top": "上端",
         "roi_right": "右端",
         "roi_bottom": "下端",
+        "preview_title": "処理結果プレビュー（1枚目の画像）",
+        "preview_description": "1枚目の画像の処理結果のプレビューです。バッチ処理を開始する前に、これらの結果が期待通りかご確認ください。",
+        "preview_metrics": "プレビューの測定値",
+        "roi_warning": "ROIが選択されていません。画像全体を処理します。",
         "about_description": """
         このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
 
@@ -619,7 +634,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     roi = select_roi_for_batch(display_image, lang)
     
     if not roi:
-        st.warning("ROIが選択されていません。画像全体を処理します。")
+        st.warning(get_text("roi_warning", lang))
         return None, []
     
     # スケール調整したROIを元のサイズに変換
@@ -639,10 +654,12 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     )
     
     # プレビュー結果の表示
-    st.subheader("処理結果プレビュー（1枚目の画像）")
+    st.subheader(get_text("preview_title", lang))
+    st.write(get_text("preview_description", lang))
     display_analysis_images(roi_image, preview_images["masked"], preview_images["edges"], lang)
     
     # プレビューの基本指標を表示
+    st.subheader(get_text("preview_metrics", lang))
     metric_cols = st.columns(3)
     with metric_cols[0]:
         st.metric(get_text("coverage_rate", lang), 
