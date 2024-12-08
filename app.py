@@ -485,12 +485,11 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
     """インタラクティブなROI選択機能の修正版"""
     img_base64 = convert_image_to_base64(image)
     
-    # コンポーネントの状態管理
-    if 'roi_value' not in st.session_state:
-        st.session_state.roi_value = None
-
+    # KeyとしてROIのコンポーネントIDを設定
+    component_key = f"roi_selector_{id(image)}"
+    
     # コンポーネントの作成
-    roi_component = components.html(
+    roi_data = components.html(
         f"""
         <style>
             .roi-container {{
@@ -538,57 +537,151 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
         </div>
 
         <script>
-            // ... (JavaScript code remains the same as before) ...
+            const container = document.getElementById("roiContainer");
+            const roiBox = document.getElementById("roiBox");
+            const handle = document.getElementById("roiHandle");
+            const img = document.getElementById("sourceImage");
 
-            function updateROI() {{
-                const rect = roiBox.getBoundingClientRect();
-                const containerRect = container.getBoundingClientRect();
+            img.onload = function() {{
+                container.style.width = img.offsetWidth + 'px';
+                container.style.height = img.offsetHeight + 'px';
                 
-                // 相対座標の計算
-                const x = (roiBox.offsetLeft) / container.offsetWidth;
-                const y = (roiBox.offsetTop) / container.offsetHeight;
-                const w = roiBox.offsetWidth / container.offsetWidth;
-                const h = roiBox.offsetHeight / container.offsetHeight;
+                const initialWidth = Math.min(100, img.offsetWidth / 3);
+                const initialHeight = Math.min(100, img.offsetHeight / 3);
+                const initialLeft = (img.offsetWidth - initialWidth) / 2;
+                const initialTop = (img.offsetHeight - initialHeight) / 2;
                 
-                // 画像の実際のサイズを考慮したスケーリング
+                roiBox.style.width = initialWidth + 'px';
+                roiBox.style.height = initialHeight + 'px';
+                roiBox.style.left = initialLeft + 'px';
+                roiBox.style.top = initialTop + 'px';
+                roiBox.style.transform = 'none';
+                
+                // 初期値を送信
+                sendROIData();
+            }};
+
+            let isDragging = false;
+            let isResizing = false;
+            let startX;
+            let startY;
+            let startLeft;
+            let startTop;
+            let startWidth;
+            let startHeight;
+
+            roiBox.addEventListener("mousedown", function(e) {{
+                if (e.target === handle) return;
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = roiBox.offsetLeft;
+                startTop = roiBox.offsetTop;
+                e.preventDefault();
+            }});
+
+            handle.addEventListener("mousedown", function(e) {{
+                isResizing = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startWidth = roiBox.offsetWidth;
+                startHeight = roiBox.offsetHeight;
+                e.preventDefault();
+                e.stopPropagation();
+            }});
+
+            document.addEventListener("mousemove", function(e) {{
+                if (isDragging) {{
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    
+                    let newLeft = startLeft + dx;
+                    let newTop = startTop + dy;
+                    
+                    newLeft = Math.max(0, Math.min(newLeft, container.offsetWidth - roiBox.offsetWidth));
+                    newTop = Math.max(0, Math.min(newTop, container.offsetHeight - roiBox.offsetHeight));
+                    
+                    roiBox.style.left = newLeft + 'px';
+                    roiBox.style.top = newTop + 'px';
+                    
+                    sendROIData();
+                }} else if (isResizing) {{
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    
+                    let newWidth = Math.max(50, startWidth + dx);
+                    let newHeight = Math.max(50, startHeight + dy);
+                    
+                    newWidth = Math.min(newWidth, container.offsetWidth - roiBox.offsetLeft);
+                    newHeight = Math.min(newHeight, container.offsetHeight - roiBox.offsetTop);
+                    
+                    roiBox.style.width = newWidth + 'px';
+                    roiBox.style.height = newHeight + 'px';
+                    
+                    sendROIData();
+                }}
+            }});
+
+            document.addEventListener("mouseup", function() {{
+                if (isDragging || isResizing) {{
+                    isDragging = false;
+                    isResizing = false;
+                    sendROIData();
+                }}
+            }});
+
+            function sendROIData() {{
                 const imageWidth = {image.shape[1]};
                 const imageHeight = {image.shape[0]};
                 
+                // 画像に対する相対位置を計算
+                const scaleX = imageWidth / img.offsetWidth;
+                const scaleY = imageHeight / img.offsetHeight;
+                
+                const x = Math.round(roiBox.offsetLeft * scaleX);
+                const y = Math.round(roiBox.offsetTop * scaleY);
+                const width = Math.round(roiBox.offsetWidth * scaleX);
+                const height = Math.round(roiBox.offsetHeight * scaleY);
+                
                 const roi = {{
-                    x: Math.round(x * imageWidth),
-                    y: Math.round(y * imageHeight),
-                    width: Math.round(w * imageWidth),
-                    height: Math.round(h * imageHeight)
+                    x: x,
+                    y: y,
+                    width: width,
+                    height: height
                 }};
                 
                 window.Streamlit.setComponentValue(roi);
             }}
         </script>
         """,
-        height=600
+        height=600,
+        key=component_key
     )
 
-    # コンポーネントの値を更新
-    if roi_component is not None:
-        st.session_state.roi_value = roi_component
-
-    # ROIの値を取得
-    if st.session_state.roi_value is not None:
+    # ROIデータの取得と変換
+    if roi_data is not None and isinstance(roi_data, dict):
         try:
-            roi_data = st.session_state.roi_value
-            x1 = max(0, min(roi_data['x'], image.shape[1]-1))
-            y1 = max(0, min(roi_data['y'], image.shape[0]-1))
-            x2 = max(0, min(x1 + roi_data['width'], image.shape[1]-1))
-            y2 = max(0, min(y1 + roi_data['height'], image.shape[0]-1))
+            x1 = int(roi_data.get('x', 0))
+            y1 = int(roi_data.get('y', 0))
+            width = int(roi_data.get('width', 0))
+            height = int(roi_data.get('height', 0))
             
-            # 有効な範囲であることを確認
+            # 範囲の計算
+            x2 = x1 + width
+            y2 = y1 + height
+            
+            # 境界チェック
+            x1 = max(0, min(x1, image.shape[1]-1))
+            x2 = max(0, min(x2, image.shape[1]-1))
+            y1 = max(0, min(y1, image.shape[0]-1))
+            y2 = max(0, min(y2, image.shape[0]-1))
+            
             if x2 > x1 and y2 > y1:
                 return (x1, y1, x2, y2)
                 
-        except (KeyError, TypeError, AttributeError) as e:
-            # エラーを詳細にログ出力
-            st.error(f"ROI data error: {str(e)}, Value: {st.session_state.roi_value}")
-    
+        except Exception as e:
+            st.error(f"ROI conversion error: {str(e)}")
+            
     return None
 
 @st.cache_data(max_entries=10)
