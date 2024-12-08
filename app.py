@@ -433,7 +433,7 @@ def process_single_image(
         image = apply_roi(image, roi)
     
     # リサイズ
-    image = resize_if_needed(image)
+    #image = resize_if_needed(image)
     
     # float32で計算
     image_float = image.astype(np.float32) 
@@ -627,7 +627,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
     
     # ROI選択UI用の画像表示
-    display_image = resize_for_display(first_image, 300)
+    display_image = first_image.copy()
     st.subheader(get_text("roi_selection", lang))
     st.image(display_image, caption=get_text("original_image", lang), use_column_width=True)
     roi = select_roi_for_batch(display_image, lang)
@@ -636,15 +636,8 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
         st.warning(get_text("roi_warning", lang))
         return None, []
     
-    # スケール調整したROIを元のサイズに変換
-    h_scale = first_image.shape[0] / display_image.shape[0]
-    w_scale = first_image.shape[1] / display_image.shape[1]
-    original_roi = (
-        int(roi[0] * w_scale),
-        int(roi[1] * h_scale),
-        int(roi[2] * w_scale),
-        int(roi[3] * h_scale)
-    )
+    # ROIの選択結果をそのまま適用
+    original_roi = roi 
     
     # 1枚目の画像のプレビュー処理
     roi_image = apply_roi(first_image, original_roi)
