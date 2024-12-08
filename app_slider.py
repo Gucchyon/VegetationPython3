@@ -1,9 +1,10 @@
-import streamlit.components.v1 as components
 import streamlit as st
-import base64
-from io import BytesIO
-from PIL import Image
 import numpy as np
+import cv2
+import pandas as pd
+import base64
+from typing import Tuple, Dict, List
+import gc
 
 # 言語定義
 TRANSLATIONS = {
@@ -350,168 +351,38 @@ def resize_if_needed(image: np.ndarray, max_size: int = 1024) -> np.ndarray:
         return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
     return image
 
-def create_interactive_roi_selector():
-    """インタラクティブなROI選択のためのHTMLコンポーネントを作成"""
-    return """
-    <style>
-        .roi-container {
-            position: relative;
-            display: inline-block;
-        }
-        .roi-box {
-            position: absolute;
-            border: 2px solid #00ff00;
-            cursor: move;
-        }
-        .roi-resize-handle {
-            width: 10px;
-            height: 10px;
-            background-color: #00ff00;
-            position: absolute;
-            right: -5px;
-            bottom: -5px;
-            cursor: se-resize;
-        }
-    </style>
+class ROISelector:
+    def __init__(self):
+        self.roi = None
+        self.drawing = False
+        self.start_point = None
+        self.end_point = None
+        self.temp_image = None
 
-    <div class="roi-container" id="roiContainer">
-        <img id="sourceImage" style="max-width: 100%;" />
-        <div class="roi-box" id="roiBox">
-            <div class="roi-resize-handle" id="roiHandle"></div>
-        </div>
-    </div>
-
-    <script>
-        // ROIの状態管理
-        let isDragging = false;
-        let isResizing = false;
-        let currentX;
-        let currentY;
-        let initialX;
-        let initialY;
-        let xOffset = 0;
-        let yOffset = 0;
-        let initialWidth;
-        let initialHeight;
-
-        // DOM要素の取得
-        const container = document.getElementById("roiContainer");
-        const roiBox = document.getElementById("roiBox");
-        const handle = document.getElementById("roiHandle");
-        const img = document.getElementById("sourceImage");
-
-        // イベントリスナーの設定
-        roiBox.addEventListener("mousedown", startDragging);
-        handle.addEventListener("mousedown", startResizing);
-        document.addEventListener("mousemove", drag);
-        document.addEventListener("mouseup", stopDragging);
-
-        // ドラッグ開始
-        function startDragging(e) {
-            if (e.target === handle) return;
-            isDragging = true;
-            initialX = e.clientX - xOffset;
-            initialY = e.clientY - yOffset;
-        }
-
-        // リサイズ開始
-        function startResizing(e) {
-            isResizing = true;
-            initialWidth = roiBox.offsetWidth;
-            initialHeight = roiBox.offsetHeight;
-            initialX = e.clientX;
-            initialY = e.clientY;
-            e.stopPropagation();
-        }
-
-        // ドラッグとリサイズの処理
-        function drag(e) {
-            if (isDragging) {
-                e.preventDefault();
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
-
-                xOffset = currentX;
-                yOffset = currentY;
-
-                setTranslate(currentX, currentY, roiBox);
-            } else if (isResizing) {
-                e.preventDefault();
-                const width = initialWidth + (e.clientX - initialX);
-                const height = initialHeight + (e.clientY - initialY);
-
-                roiBox.style.width = `${width}px`;
-                roiBox.style.height = `${height}px`;
-            }
-        }
-
-        // ドラッグ終了
-        function stopDragging() {
-            isDragging = false;
-            isResizing = false;
-            // ROIの位置とサイズを親コンポーネントに通知
-            const rect = roiBox.getBoundingClientRect();
-            const imgRect = img.getBoundingClientRect();
-            const roi = {
-                x: (rect.left - imgRect.left) / img.width,
-                y: (rect.top - imgRect.top) / img.height,
-                width: rect.width / img.width,
-                height: rect.height / img.height
-            };
-            // Streamlitに値を送信
-            window.parent.postMessage({
-                type: "roi_update",
-                roi: roi
-            }, "*");
-        }
-
-        function setTranslate(xPos, yPos, el) {
-            el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
-        }
-    </script>
-    """
-
-def convert_image_to_base64(image):
-    """numpy配列をbase64エンコードされた画像に変換"""
-    if isinstance(image, np.ndarray):
-        img = Image.fromarray(image)
-        buffered = BytesIO()
-        img.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode()
-    return None
-
-def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
-    """インタラクティブなROI選択機能"""
-    # 画像をbase64エンコード
-    img_base64 = convert_image_to_base64(image)
-    
-    # カスタムコンポーネントの作成
-    roi_component = create_interactive_roi_selector()
-    components.html(
-        f"""
-        {roi_component}
-        <script>
-            document.getElementById('sourceImage').src = 'data:image/png;base64,{img_base64}';
-        </script>
-        """,
-        height=600
-    )
-    
-    # ROIの値を受け取るためのセッション状態
-    if 'roi_coords' not in st.session_state:
-        st.session_state.roi_coords = None
-    
-    # JavaScriptからの更新を処理
-    if st.session_state.roi_coords:
-        roi = st.session_state.roi_coords
-        h, w = image.shape[:2]
-        x1 = int(roi['x'] * w)
-        y1 = int(roi['y'] * h)
-        x2 = int((roi['x'] + roi['width']) * w)
-        y2 = int((roi['y'] + roi['height']) * h)
-        return (x1, y1, x2, y2)
-    
-    return None
+    def mouse_callback(self, event, x, y, flags, param):
+        image = self.temp_image.copy()
+        
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawing = True
+            self.start_point = (x, y)
+            self.end_point = (x, y)
+        
+        elif event == cv2.EVENT_MOUSEMOVE and self.drawing:
+            self.end_point = (x, y)
+            # 選択範囲を表示
+            cv2.rectangle(image, self.start_point, self.end_point, (0, 255, 0), 2)
+            cv2.imshow('ROI Selection', image)
+        
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.drawing = False
+            self.roi = (
+                min(self.start_point[0], self.end_point[0]),
+                min(self.start_point[1], self.end_point[1]),
+                max(self.start_point[0], self.end_point[0]),
+                max(self.start_point[1], self.end_point[1])
+            )
+            cv2.rectangle(image, (self.roi[0], self.roi[1]), (self.roi[2], self.roi[3]), (0, 255, 0), 2)
+            cv2.imshow('ROI Selection', image)
 
 def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
     if roi is None:
@@ -628,6 +499,83 @@ def process_single_image(
     
     return images, pixels, indices_result, par
 
+def select_roi_interactive(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
+    """インタラクティブなROI選択機能"""
+    h, w = image.shape[:2]
+    
+    # セッション状態の初期化
+    if 'roi_x1' not in st.session_state:
+        st.session_state.roi_x1 = 0
+    if 'roi_y1' not in st.session_state:
+        st.session_state.roi_y1 = 0
+    if 'roi_x2' not in st.session_state:
+        st.session_state.roi_x2 = w-1
+    if 'roi_y2' not in st.session_state:
+        st.session_state.roi_y2 = h-1
+    
+    # スライダーによる選択
+    st.write(get_text("roi_instructions", lang))
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        x1 = st.slider(get_text("roi_left", lang), 0, w-1, st.session_state.roi_x1, key="roi_x1_slider")
+        y1 = st.slider(get_text("roi_top", lang), 0, h-1, st.session_state.roi_y1, key="roi_y1_slider")
+    
+    with col2:
+        x2 = st.slider(get_text("roi_right", lang), x1, w-1, st.session_state.roi_x2, key="roi_x2_slider")
+        y2 = st.slider(get_text("roi_bottom", lang), y1, h-1, st.session_state.roi_y2, key="roi_y2_slider")
+    
+    # セッション状態の更新
+    st.session_state.roi_x1 = x1
+    st.session_state.roi_y1 = y1
+    st.session_state.roi_x2 = x2
+    st.session_state.roi_y2 = y2
+    
+    # ROIを可視化
+    img_copy = image.copy()
+    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    st.image(img_copy, caption=get_text("roi_selection", lang), use_column_width=True)
+    
+    return (x1, y1, x2, y2)
+
+def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
+    """バッチ処理用のROI選択関数"""
+    h, w = image.shape[:2]
+    
+    # バッチ処理用のセッション状態の初期化
+    if 'batch_roi_x1' not in st.session_state:
+        st.session_state.batch_roi_x1 = 0
+    if 'batch_roi_y1' not in st.session_state:
+        st.session_state.batch_roi_y1 = 0
+    if 'batch_roi_x2' not in st.session_state:
+        st.session_state.batch_roi_x2 = w-1
+    if 'batch_roi_y2' not in st.session_state:
+        st.session_state.batch_roi_y2 = h-1
+    
+    st.write(get_text("roi_instructions", lang))
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        x1 = st.slider("左端 (X1)", 0, w-1, st.session_state.batch_roi_x1, key="batch_roi_x1_slider")
+        y1 = st.slider("上端 (Y1)", 0, h-1, st.session_state.batch_roi_y1, key="batch_roi_y1_slider")
+    
+    with col2:
+        x2 = st.slider("右端 (X2)", x1, w-1, st.session_state.batch_roi_x2, key="batch_roi_x2_slider")
+        y2 = st.slider("下端 (Y2)", y1, h-1, st.session_state.batch_roi_y2, key="batch_roi_y2_slider")
+    
+    # セッション状態の更新
+    st.session_state.batch_roi_x1 = x1
+    st.session_state.batch_roi_y1 = y1
+    st.session_state.batch_roi_x2 = x2
+    st.session_state.batch_roi_y2 = y2
+    
+    # ROIを可視化
+    img_copy = image.copy()
+    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    st.image(img_copy, caption=get_text("roi_selection", lang), use_column_width=True)
+    
+    return (x1, y1, x2, y2)
+
 def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
     """バッチ処理の実行（最初の画像でROIを指定し、それを他の画像に適用）"""
     if not uploaded_files:
@@ -642,7 +590,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     # ROI選択UIの表示
     st.subheader(get_text("roi_selection", lang))
     st.image(first_image, caption=get_text("original_image", lang))
-    roi = interactive_roi_selection(first_image, lang)  # バッチ処理用のROI選択関数を使用
+    roi = select_roi_for_batch(first_image, lang)  # バッチ処理用のROI選択関数を使用
     
     if not roi:
         st.warning("ROIが選択されていません。画像全体を処理します。")
@@ -778,12 +726,20 @@ def main():
                 
                 with roi_container:
                     st.subheader(get_text("roi_selection", lang))
-                    if st.checkbox(get_text("select_roi", lang), key='enable_roi'):
-                        st.session_state.roi = interactive_roi_selection(image, lang)
+                    roi_col1, roi_col2 = st.columns(2)
                     
-                    if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
-                        st.session_state.roi = None
-                        st.session_state.roi_coords = None
+                    with roi_col1:
+                        if st.checkbox(get_text("select_roi", lang), key='select_roi_btn'):
+                            st.session_state.roi = select_roi_interactive(image, lang)
+                    
+                    with roi_col2:
+                        if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
+                            st.session_state.roi = None
+                            st.session_state.roi_x1 = None
+                            st.session_state.roi_y1 = None
+                            st.session_state.roi_x2 = None
+                            st.session_state.roi_y2 = None
+                
                 # ROIの適用と処理
                 working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
                 images, pixels, indices, par = process_single_image(
