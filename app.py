@@ -553,9 +553,11 @@ def main():
         }[x]
     )
 
-    # ROI選択のための状態管理
+    # セッション状態の初期化
     if 'roi' not in st.session_state:
         st.session_state.roi = None
+    if 'current_tab' not in st.session_state:
+        st.session_state.current_tab = 0
 
     st.title(get_text("app_title", lang))
     
@@ -589,12 +591,13 @@ def main():
                     selected_indices.append(key)
 
     
+    # タブの作成を修正
     tab1, tab2 = st.tabs([
         get_text("single_image", lang),
         get_text("batch_processing", lang)
     ])
-        
-    with tab1:
+    
+    with tab1:  # Single Image tab
         uploaded_file = st.file_uploader(
             get_text("upload_image", lang),
             type=["png", "jpg", "jpeg"],
@@ -607,17 +610,20 @@ def main():
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                # ROI選択機能
-                st.subheader(get_text("roi_selection", lang))
-                roi_col1, roi_col2 = st.columns(2)
+                # ROI選択のコンテナを作成
+                roi_container = st.container()
                 
-                with roi_col1:
-                    if st.button(get_text("select_roi", lang)):
-                        st.session_state.roi = select_roi(image)
-                
-                with roi_col2:
-                    if st.button(get_text("reset_roi", lang)):
-                        st.session_state.roi = None
+                with roi_container:
+                    st.subheader(get_text("roi_selection", lang))
+                    roi_col1, roi_col2 = st.columns(2)
+                    
+                    with roi_col1:
+                        if st.button(get_text("select_roi", lang), key='select_roi_btn'):
+                            st.session_state.roi = select_roi(image)
+                    
+                    with roi_col2:
+                        if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
+                            st.session_state.roi = None
                 
                 # ROIの適用と処理
                 working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
@@ -657,7 +663,7 @@ def main():
             except Exception as e:
                 st.error(f"{get_text('error_occurred', lang)} {str(e)}")
 
-    with tab2:
+    with tab2:  # Batch Processing tab
         # ROIの警告表示
         if st.session_state.roi:
             st.info(get_text("roi_instructions", lang))
