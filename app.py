@@ -279,7 +279,7 @@ TRANSLATIONS = {
         "roi_left": "左端",
         "roi_top": "上端",
         "roi_right": "右端",
-        "roi_bottom": "下端"
+        "roi_bottom": "下端",
         "about_description": """
         このアプリケーションは、様々な植生指数を用いて画像内の植生を解析します。単一画像の処理と複数画像の一括処理の両方に対応しています。
 
