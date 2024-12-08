@@ -714,90 +714,112 @@ def process_single_image(
     selected_indices: List[str],
     roi: Tuple[int, int, int, int] = None
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, int], Dict[str, Dict], Dict[str, float]]:
-    # ROIの適用
-    if roi:
-        image = apply_roi(image, roi)
+    """ROIを考慮した画像処理関数"""
+    try:
+        # ROIの適用
+        if roi is not None:
+            x1, y1, x2, y2 = roi
+            h, w = image.shape[:2]
+            
+            # 範囲チェック
+            x1 = max(0, min(x1, w-1))
+            x2 = max(0, min(x2, w-1))
+            y1 = max(0, min(y1, h-1))
+            y2 = max(0, min(y2, h-1))
+            
+            # 正しい順序を確保
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            
+            # ROIを適用
+            if x2 > x1 and y2 > y1:
+                image = image[y1:y2, x1:x2].copy()
     
-    # リサイズ
-    image = resize_if_needed(image)
-    
-    # float32で計算
-    image_float = image.astype(np.float32) 
-    b, g, r = cv2.split(image_float)
-    del image_float
-    gc.collect()
-    
-    # 元画像の合計値を保存
-    total_raw = r + g + b
-    
-    # Raw mode用の正規化
-    nr_raw = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
-    ng_raw = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
-    nb_raw = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
-    
-    # マスク生成
-    exg = 2 * ng_raw - nr_raw - nb_raw
-    if threshold_method == "otsu":
-        exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
-        thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        threshold = (thresh / 127.5) - 1
-        del exg_uint8
-    else:
-        threshold = exg_threshold
-    
-    binary_mask = (exg >= threshold).astype(np.uint8) * 255
-    edges = cv2.Canny(binary_mask, 100, 200)
-    
-    # マスク処理
-    mask_bool = binary_mask > 0
-    
-    # マスクされた値の計算
-    r_masked = r * mask_bool
-    g_masked = g * mask_bool
-    b_masked = b * mask_bool
-    
-    # マスク領域用の正規化値
-    nr_masked = np.divide(r_masked, total_raw, out=np.zeros_like(r), where=total_raw!=0)
-    ng_masked = np.divide(g_masked, total_raw, out=np.zeros_like(g), where=total_raw!=0)
-    nb_masked = np.divide(b_masked, total_raw, out=np.zeros_like(b), where=total_raw!=0)
-    
-    # マスク画像の作成
-    masked_image = image.copy()
-    masked_image[binary_mask == 0] = 0
-    
-    images = {
-        "binary": binary_mask,
-        "masked": masked_image,
-        "edges": edges
-    }
-    
-    # ピクセル数の計算
-    pixels = {
-        "veg": np.count_nonzero(binary_mask),
-        "total": binary_mask.size,
-        "perimeter": np.count_nonzero(edges)
-    }
-    
-    # 指標計算
-    indices_result = {"raw": {}, "masked": {}}
-    for index_name in selected_indices:
-        if index_name == "INT":
-            raw_value = ALGORITHMS[index_name][1](r, g, b)
-            masked_value = ALGORITHMS[index_name][1](r_masked, g_masked, b_masked)
-        else:
-            raw_value = ALGORITHMS[index_name][1](nr_raw, ng_raw, nb_raw)
-            masked_value = ALGORITHMS[index_name][1](nr_masked, ng_masked, nb_masked)
+        # リサイズ
+        image = resize_if_needed(image)
         
-        indices_result["raw"][index_name] = float(np.mean(raw_value))
-        indices_result["masked"][index_name] = float(np.mean(raw_value[mask_bool])) if pixels["veg"] > 0 else 0.0
-        del raw_value, masked_value
-    
-    # PAR計算
-    par = {
-        "value": pixels["perimeter"] / pixels["veg"] if pixels["veg"] > 0 else 0
-    }
-    
-    return images, pixels, indices_result, par
+        # float32で計算
+        image_float = image.astype(np.float32) 
+        b, g, r = cv2.split(image_float)
+        del image_float
+        gc.collect()
+        
+        # 元画像の合計値を保存
+        total_raw = r + g + b
+        
+        # Raw mode用の正規化
+        nr_raw = np.divide(r, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+        ng_raw = np.divide(g, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+        nb_raw = np.divide(b, total_raw, out=np.zeros_like(b), where=total_raw!=0)
+        
+        # マスク生成
+        exg = 2 * ng_raw - nr_raw - nb_raw
+        if threshold_method == "otsu":
+            exg_uint8 = ((exg + 1) * 127.5).astype(np.uint8)
+            thresh, _ = cv2.threshold(exg_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            threshold = (thresh / 127.5) - 1
+            del exg_uint8
+        else:
+            threshold = exg_threshold
+        
+        binary_mask = (exg >= threshold).astype(np.uint8) * 255
+        edges = cv2.Canny(binary_mask, 100, 200)
+        
+        # マスク処理
+        mask_bool = binary_mask > 0
+        
+        # マスクされた値の計算
+        r_masked = r * mask_bool
+        g_masked = g * mask_bool
+        b_masked = b * mask_bool
+        
+        # マスク領域用の正規化値
+        total_masked = r_masked + g_masked + b_masked
+        nr_masked = np.divide(r_masked, total_raw, out=np.zeros_like(r), where=total_raw!=0)
+        ng_masked = np.divide(g_masked, total_raw, out=np.zeros_like(g), where=total_raw!=0)
+        nb_masked = np.divide(b_masked, total_raw, out=np.zeros_like(b), where=total_raw!=0)
+        
+        # マスク画像の作成
+        masked_image = image.copy()
+        masked_image[binary_mask == 0] = 0
+        
+        images = {
+            "binary": binary_mask,
+            "masked": masked_image,
+            "edges": edges
+        }
+        
+        # ピクセル数の計算
+        pixels = {
+            "veg": np.count_nonzero(binary_mask),
+            "total": binary_mask.size,
+            "perimeter": np.count_nonzero(edges)
+        }
+        
+        # 指標計算
+        indices_result = {"raw": {}, "masked": {}}
+        for index_name in selected_indices:
+            if index_name == "INT":
+                raw_value = ALGORITHMS[index_name][1](r, g, b)
+                masked_value = ALGORITHMS[index_name][1](r_masked, g_masked, b_masked)
+            else:
+                raw_value = ALGORITHMS[index_name][1](nr_raw, ng_raw, nb_raw)
+                masked_value = ALGORITHMS[index_name][1](nr_masked, ng_masked, nb_masked)
+            
+            indices_result["raw"][index_name] = float(np.mean(raw_value))
+            indices_result["masked"][index_name] = float(np.mean(raw_value[mask_bool])) if pixels["veg"] > 0 else 0.0
+            del raw_value, masked_value
+        
+        # PAR計算
+        par = {
+            "value": pixels["perimeter"] / pixels["veg"] if pixels["veg"] > 0 else 0
+        }
+        
+        return images, pixels, indices_result, par
+        
+    except Exception as e:
+        st.error(f"画像処理中にエラーが発生しました: {str(e)}")
+        raise e
 
 def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
     """バッチ処理の実行（最初の画像でROIを指定し、それを他の画像に適用）"""
@@ -998,17 +1020,19 @@ def main():
                                 st.session_state.roi_applied = False
                                 if hasattr(st.session_state, 'temp_roi'):
                                     del st.session_state.temp_roi
-                                st.rerun()
+                                st.experimental_rerun()
                 
-                # ROIの適用と処理
-                if st.session_state.get('roi_applied', False) and st.session_state.roi:
-                    working_image = apply_roi(image, st.session_state.roi)
-                else:
-                    working_image = image
+                # キャッシュをクリアして再処理
+                if st.session_state.get('roi_applied', False):
+                    process_single_image.clear()
                 
                 # 処理結果の表示
                 images, pixels, indices, par = process_single_image(
-                    working_image, threshold_method, exg_threshold, selected_indices
+                    image,
+                    threshold_method,
+                    exg_threshold,
+                    selected_indices,
+                    st.session_state.roi if st.session_state.get('roi_applied', False) else None
                 )
                 
                 # 結果の表示
