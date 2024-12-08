@@ -485,11 +485,11 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
     """インタラクティブなROI選択機能の修正版"""
     img_base64 = convert_image_to_base64(image)
     
-    # KeyとしてROIのコンポーネントIDを設定
-    component_key = f"roi_selector_{id(image)}"
-    
-    # コンポーネントの作成
-    roi_data = components.html(
+    if 'roi_data' not in st.session_state:
+        st.session_state.roi_data = None
+
+    # コンポーネントの作成（keyパラメータなし）
+    roi_value = components.html(
         f"""
         <style>
             .roi-container {{
@@ -542,6 +542,7 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
             const handle = document.getElementById("roiHandle");
             const img = document.getElementById("sourceImage");
 
+            // 画像読み込み完了時の処理
             img.onload = function() {{
                 container.style.width = img.offsetWidth + 'px';
                 container.style.height = img.offsetHeight + 'px';
@@ -557,8 +558,7 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
                 roiBox.style.top = initialTop + 'px';
                 roiBox.style.transform = 'none';
                 
-                // 初期値を送信
-                sendROIData();
+                updateROI();
             }};
 
             let isDragging = false;
@@ -604,7 +604,7 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
                     roiBox.style.left = newLeft + 'px';
                     roiBox.style.top = newTop + 'px';
                     
-                    sendROIData();
+                    updateROI();
                 }} else if (isResizing) {{
                     const dx = e.clientX - startX;
                     const dy = e.clientY - startY;
@@ -618,7 +618,7 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
                     roiBox.style.width = newWidth + 'px';
                     roiBox.style.height = newHeight + 'px';
                     
-                    sendROIData();
+                    updateROI();
                 }}
             }});
 
@@ -626,11 +626,11 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
                 if (isDragging || isResizing) {{
                     isDragging = false;
                     isResizing = false;
-                    sendROIData();
+                    updateROI();
                 }}
             }});
 
-            function sendROIData() {{
+            function updateROI() {{
                 const imageWidth = {image.shape[1]};
                 const imageHeight = {image.shape[0]};
                 
@@ -643,32 +643,30 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
                 const width = Math.round(roiBox.offsetWidth * scaleX);
                 const height = Math.round(roiBox.offsetHeight * scaleY);
                 
-                const roi = {{
+                window.Streamlit.setComponentValue({{
                     x: x,
                     y: y,
                     width: width,
                     height: height
-                }};
-                
-                window.Streamlit.setComponentValue(roi);
+                }});
             }}
         </script>
         """,
-        height=600,
-        key=component_key
+        height=600
     )
 
-    # ROIデータの取得と変換
-    if roi_data is not None and isinstance(roi_data, dict):
+    # ROIの値を保存
+    if roi_value is not None:
+        st.session_state.roi_data = roi_value
+
+    # ROIの値を取得して返す
+    if st.session_state.roi_data is not None:
         try:
-            x1 = int(roi_data.get('x', 0))
-            y1 = int(roi_data.get('y', 0))
-            width = int(roi_data.get('width', 0))
-            height = int(roi_data.get('height', 0))
-            
-            # 範囲の計算
-            x2 = x1 + width
-            y2 = y1 + height
+            roi_data = st.session_state.roi_data
+            x1 = int(roi_data['x'])
+            y1 = int(roi_data['y'])
+            x2 = x1 + int(roi_data['width'])
+            y2 = y1 + int(roi_data['height'])
             
             # 境界チェック
             x1 = max(0, min(x1, image.shape[1]-1))
