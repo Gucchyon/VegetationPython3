@@ -590,13 +590,39 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     # ROI選択UIの表示
     st.subheader(get_text("roi_selection", lang))
     st.image(first_image, caption=get_text("original_image", lang))
-    roi = select_roi_for_batch(first_image, lang)  # バッチ処理用のROI選択関数を使用
+    roi = select_roi_for_batch(first_image, lang)
     
     if not roi:
         st.warning("ROIが選択されていません。画像全体を処理します。")
         return None, []
     
-    if st.button(get_text("apply_roi", lang), key="batch_apply_roi"):  # キーを追加
+    # 1枚目の画像のプレビュー処理
+    roi_image = apply_roi(first_image, roi)
+    preview_images, preview_pixels, preview_indices, preview_par = process_single_image(
+        roi_image, threshold_method, exg_threshold, selected_indices
+    )
+    
+    # プレビュー結果の表示
+    st.subheader("処理結果プレビュー（1枚目の画像）")
+    preview_cols = st.columns(3)
+    with preview_cols[0]:
+        st.image(roi_image, caption=get_text("original_image", lang))
+    with preview_cols[1]:
+        st.image(preview_images["masked"], caption=get_text("vegetation_result", lang))
+    with preview_cols[2]:
+        st.image(preview_images["edges"], caption="Edge Detection Result")
+    
+    # プレビューの基本指標を表示
+    metric_cols = st.columns(3)
+    with metric_cols[0]:
+        st.metric(get_text("coverage_rate", lang), 
+                 f"{(preview_pixels['veg'] / preview_pixels['total']) * 100:.2f}%")
+    with metric_cols[1]:
+        st.metric(get_text("veg_pixels", lang), f"{preview_pixels['veg']:,}")
+    with metric_cols[2]:
+        st.metric("PAR", f"{preview_par['value']:.4f}")
+    
+    if st.button(get_text("apply_roi", lang), key="batch_apply_roi"):
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -610,7 +636,23 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
                 status_text.text(f"{get_text('processing', lang)} {file.name} ({i+1}/{total_files})")
                 
                 if i == 0:
-                    file.seek(0)
+                    # 1枚目は既に処理済みなのでその結果を使用
+                    result = {
+                        get_text("file_name", lang): file.name,
+                        get_text("coverage_rate_percent", lang): (preview_pixels['veg'] / preview_pixels['total']) * 100,
+                        get_text("veg_pixels", lang): preview_pixels['veg'],
+                        get_text("total_pixels", lang): preview_pixels['total'],
+                        "PAR": preview_par['value'],
+                        get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
+                        get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
+                    }
+                    
+                    for key in selected_indices:
+                        result[f'{ALGORITHMS[key][0]} (Raw)'] = preview_indices['raw'][key]
+                        result[f'{ALGORITHMS[key][0]} (Masked)'] = preview_indices['masked'][key]
+                    
+                    results.append(result)
+                    continue
                 
                 file_bytes = np.frombuffer(file.read(), np.uint8)
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
