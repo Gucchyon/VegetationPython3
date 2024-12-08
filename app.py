@@ -507,28 +507,46 @@ def process_single_image(
     
     return images, pixels, indices_result, par
 
+def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
+    """バッチ処理用のROI選択関数"""
+    h, w = image.shape[:2]
+    
+    # バッチ処理用のセッション状態の初期化
+    if 'batch_roi_x1' not in st.session_state:
+        st.session_state.batch_roi_x1 = 0
+    if 'batch_roi_y1' not in st.session_state:
+        st.session_state.batch_roi_y1 = 0
+    if 'batch_roi_x2' not in st.session_state:
+        st.session_state.batch_roi_x2 = w-1
+    if 'batch_roi_y2' not in st.session_state:
+        st.session_state.batch_roi_y2 = h-1
+    
+    st.write(get_text("roi_instructions", lang))
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        x1 = st.slider("左端 (X1)", 0, w-1, st.session_state.batch_roi_x1, key="batch_roi_x1_slider")
+        y1 = st.slider("上端 (Y1)", 0, h-1, st.session_state.batch_roi_y1, key="batch_roi_y1_slider")
+    
+    with col2:
+        x2 = st.slider("右端 (X2)", x1, w-1, st.session_state.batch_roi_x2, key="batch_roi_x2_slider")
+        y2 = st.slider("下端 (Y2)", y1, h-1, st.session_state.batch_roi_y2, key="batch_roi_y2_slider")
+    
+    # セッション状態の更新
+    st.session_state.batch_roi_x1 = x1
+    st.session_state.batch_roi_y1 = y1
+    st.session_state.batch_roi_x2 = x2
+    st.session_state.batch_roi_y2 = y2
+    
+    # ROIを可視化
+    img_copy = image.copy()
+    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    st.image(img_copy, caption=get_text("roi_selection", lang), use_column_width=True)
+    
+    return (x1, y1, x2, y2)
+
 def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
-    """
-    バッチ処理の実行（最初の画像でROIを指定し、それを他の画像に適用）
-    
-    Parameters:
-    -----------
-    uploaded_files : list
-        アップロードされた画像ファイルのリスト
-    threshold_method : str
-        閾値処理方法 ("otsu" or "exg")
-    exg_threshold : float
-        ExGの閾値（手動設定時）
-    selected_indices : list
-        選択された植生指数のリスト
-    lang : str
-        表示言語
-    
-    Returns:
-    --------
-    tuple
-        (選択されたROI, 処理結果のリスト)
-    """
+    """バッチ処理の実行（最初の画像でROIを指定し、それを他の画像に適用）"""
     if not uploaded_files:
         return None, []
     
@@ -541,51 +559,38 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     # ROI選択UIの表示
     st.subheader(get_text("roi_selection", lang))
     st.image(first_image, caption=get_text("original_image", lang))
-    roi = select_roi(first_image)
+    roi = select_roi_for_batch(first_image, lang)  # バッチ処理用のROI選択関数を使用
     
     if not roi:
         st.warning("ROIが選択されていません。画像全体を処理します。")
         return None, []
     
-    # ROIを表示して確認
-    preview_image = first_image.copy()
-    x1, y1, x2, y2 = roi
-    cv2.rectangle(preview_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    st.image(preview_image, caption="選択されたROI")
-    
-    if st.button(get_text("apply_roi", lang)):
-        # 進捗バーの初期化
+    if st.button(get_text("apply_roi", lang), key="batch_apply_roi"):  # キーを追加
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         results = []
         total_files = len(uploaded_files)
         
-        # バッチ処理の実行
         for i, file in enumerate(uploaded_files):
             try:
                 progress = i / total_files
                 progress_bar.progress(progress)
                 status_text.text(f"{get_text('processing', lang)} {file.name} ({i+1}/{total_files})")
                 
-                # ファイルの再読み込み（最初のファイルの場合はシーク位置をリセット）
                 if i == 0:
                     file.seek(0)
                 
-                # 画像の読み込みと処理
                 file_bytes = np.frombuffer(file.read(), np.uint8)
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                # ROIの適用
                 roi_image = apply_roi(image, roi)
                 
-                # 画像の処理
                 images, pixels, indices, par = process_single_image(
                     roi_image, threshold_method, exg_threshold, selected_indices
                 )
                 
-                # 結果の保存
                 result = {
                     get_text("file_name", lang): file.name,
                     get_text("coverage_rate_percent", lang): (pixels['veg'] / pixels['total']) * 100,
@@ -596,7 +601,6 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
                     get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
                 }
                 
-                # 指標値の追加
                 for key in selected_indices:
                     result[f'{ALGORITHMS[key][0]} (Raw)'] = indices['raw'][key]
                     result[f'{ALGORITHMS[key][0]} (Masked)'] = indices['masked'][key]
