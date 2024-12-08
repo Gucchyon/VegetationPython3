@@ -552,30 +552,32 @@ def select_roi_interactive(image: np.ndarray, lang: str) -> Tuple[int, int, int,
     
     return (x1, y1, x2, y2)
 
-def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
+def select_roi_for_batch(image: np.ndarray, original_image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
     """バッチ処理用のROI選択関数"""
-    h, w = image.shape[:2]
+    # 元画像のサイズを取得
+    orig_h, orig_w = original_image.shape[:2]
     
-    # バッチ処理用のセッション状態の初期化
+    # バッチ処理用のセッション状態の初期化（元画像サイズを使用）
     if 'batch_roi_x1' not in st.session_state:
         st.session_state.batch_roi_x1 = 0
     if 'batch_roi_y1' not in st.session_state:
         st.session_state.batch_roi_y1 = 0
     if 'batch_roi_x2' not in st.session_state:
-        st.session_state.batch_roi_x2 = w-1
+        st.session_state.batch_roi_x2 = orig_w - 1
     if 'batch_roi_y2' not in st.session_state:
-        st.session_state.batch_roi_y2 = h-1
+        st.session_state.batch_roi_y2 = orig_h - 1
     
     st.write(get_text("roi_instructions", lang))
     col1, col2 = st.columns(2)
     
+    # スライダーは元画像のサイズ範囲で操作
     with col1:
-        x1 = st.slider(get_text("roi_left", lang), 0, w-1, st.session_state.batch_roi_x1, key="batch_roi_x1_slider")
-        y1 = st.slider(get_text("roi_top", lang), 0, h-1, st.session_state.batch_roi_y1, key="batch_roi_y1_slider")
+        x1 = st.slider(get_text("roi_left", lang), 0, orig_w-1, st.session_state.batch_roi_x1, key="batch_roi_x1_slider")
+        y1 = st.slider(get_text("roi_top", lang), 0, orig_h-1, st.session_state.batch_roi_y1, key="batch_roi_y1_slider")
     
     with col2:
-        x2 = st.slider(get_text("roi_right", lang), x1, w-1, st.session_state.batch_roi_x2, key="batch_roi_x2_slider")
-        y2 = st.slider(get_text("roi_bottom", lang), y1, h-1, st.session_state.batch_roi_y2, key="batch_roi_y2_slider")
+        x2 = st.slider(get_text("roi_right", lang), x1, orig_w-1, st.session_state.batch_roi_x2, key="batch_roi_x2_slider")
+        y2 = st.slider(get_text("roi_bottom", lang), y1, orig_h-1, st.session_state.batch_roi_y2, key="batch_roi_y2_slider")
     
     # セッション状態の更新
     st.session_state.batch_roi_x1 = x1
@@ -583,11 +585,23 @@ def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, i
     st.session_state.batch_roi_x2 = x2
     st.session_state.batch_roi_y2 = y2
     
-    # ROIを可視化
+    # スケールを計算
+    display_h, display_w = image.shape[:2]
+    w_scale = display_w / orig_w
+    h_scale = display_h / orig_h
+    
+    # 表示用の座標を計算
+    display_x1 = int(x1 * w_scale)
+    display_y1 = int(y1 * h_scale)
+    display_x2 = int(x2 * w_scale)
+    display_y2 = int(y2 * h_scale)
+    
+    # ROIを可視化（表示用画像に合わせたサイズで描画）
     img_copy = image.copy()
-    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    cv2.rectangle(img_copy, (display_x1, display_y1), (display_x2, display_y2), (0, 255, 0), 2)
     st.image(img_copy, caption=get_text("roi_selection", lang), use_column_width=True)
     
+    # 元画像サイズでのROI座標を返す
     return (x1, y1, x2, y2)
 
 def resize_for_display(image: np.ndarray, max_size: int = 400) -> np.ndarray:
@@ -627,26 +641,19 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
     
     # 表示用の縮小画像を作成
-    display_image = resize_for_display(first_image, 300)  # 表示用に300pxにリサイズ
+    display_image = resize_for_display(first_image, 300)
     
-    # ROI選択UI用の画像表示
+    # ROI選択UI用の画像表示（元画像と表示用画像の両方を渡す）
     st.subheader(get_text("roi_selection", lang))
     st.image(display_image, caption=get_text("original_image", lang), use_column_width=True)
-    roi = select_roi_for_batch(display_image, lang)
+    roi = select_roi_for_batch(display_image, first_image, lang)
     
     if not roi:
         st.warning(get_text("roi_warning", lang))
         return None, []
     
-    # 選択されたROIを元のサイズに変換
-    h_scale = first_image.shape[0] / display_image.shape[0]
-    w_scale = first_image.shape[1] / display_image.shape[1]
-    original_roi = (
-        int(roi[0] * w_scale),
-        int(roi[1] * h_scale),
-        int(roi[2] * w_scale),
-        int(roi[3] * h_scale)
-    )
+    # ROIは既に元画像サイズなのでスケール変換は不要
+    original_roi = roi
     
     # 1枚目の画像のプレビュー処理（元サイズで処理）
     roi_image = apply_roi(first_image, original_roi)
