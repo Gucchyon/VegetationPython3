@@ -620,14 +620,16 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     if not uploaded_files:
         return None, []
     
-    # 最初の画像を読み込み
+    # 最初の画像を読み込み（元のサイズを保持）
     first_file = uploaded_files[0]
     file_bytes = np.frombuffer(first_file.read(), np.uint8)
     first_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
     
+    # 表示用の縮小画像を作成
+    display_image = resize_for_display(first_image, 300)  # 表示用に300pxにリサイズ
+    
     # ROI選択UI用の画像表示
-    display_image = resize_for_display(first_image, 300)
     st.subheader(get_text("roi_selection", lang))
     st.image(display_image, caption=get_text("original_image", lang), use_column_width=True)
     roi = select_roi_for_batch(display_image, lang)
@@ -636,7 +638,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
         st.warning(get_text("roi_warning", lang))
         return None, []
     
-    # スケール調整したROIを元のサイズに変換
+    # 選択されたROIを元のサイズに変換
     h_scale = first_image.shape[0] / display_image.shape[0]
     w_scale = first_image.shape[1] / display_image.shape[1]
     original_roi = (
@@ -646,16 +648,28 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
         int(roi[3] * h_scale)
     )
     
-    # 1枚目の画像のプレビュー処理
+    # 1枚目の画像のプレビュー処理（元サイズで処理）
     roi_image = apply_roi(first_image, original_roi)
     preview_images, preview_pixels, preview_indices, preview_par = process_single_image(
         roi_image, threshold_method, exg_threshold, selected_indices
     )
     
-    # プレビュー結果の表示（標準サイズで表示）
+    # プレビュー結果の表示（表示用にリサイズ）
     st.subheader(get_text("preview_title", lang))
     st.write(get_text("preview_description", lang))
-    display_analysis_images(roi_image, preview_images["masked"], preview_images["edges"], lang)
+    
+    # プレビュー結果を表示（小さいサイズで表示）
+    preview_roi_image = resize_for_display(roi_image, 300)
+    preview_masked_image = resize_for_display(preview_images["masked"], 300)
+    preview_edges_image = resize_for_display(preview_images["edges"], 300)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.image(preview_roi_image, caption=get_text("original_image", lang), use_column_width=True)
+    with col2:
+        st.image(preview_masked_image, caption=get_text("vegetation_result", lang), use_column_width=True)
+    with col3:
+        st.image(preview_edges_image, caption="Edge Detection Result", use_column_width=True)
     
     # プレビューの基本指標を表示
     st.subheader(get_text("preview_metrics", lang))
@@ -682,7 +696,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
                 status_text.text(f"{get_text('processing', lang)} {file.name} ({i+1}/{total_files})")
                 
                 if i == 0:
-                    # 1枚目は既に処理済みなのでその結果を使用
+                    # 1枚目は既に処理済みの結果を使用
                     result = {
                         get_text("file_name", lang): file.name,
                         get_text("coverage_rate_percent", lang): (preview_pixels['veg'] / preview_pixels['total']) * 100,
@@ -700,12 +714,12 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
                     results.append(result)
                     continue
                 
+                # 2枚目以降は元サイズで処理
                 file_bytes = np.frombuffer(file.read(), np.uint8)
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                roi_image = apply_roi(image, original_roi)  # 元サイズのROIを使用
-                
+                roi_image = apply_roi(image, original_roi)
                 images, pixels, indices, par = process_single_image(
                     roi_image, threshold_method, exg_threshold, selected_indices
                 )
