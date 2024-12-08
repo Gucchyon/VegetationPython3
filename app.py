@@ -507,52 +507,112 @@ def process_single_image(
     
     return images, pixels, indices_result, par
 
-def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang, roi=None, progress_bar=None, status_text=None):
-    results = []
-    total_files = len(uploaded_files)
+def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
+    """
+    バッチ処理の実行（最初の画像でROIを指定し、それを他の画像に適用）
     
-    for i, file in enumerate(uploaded_files, 1):
-        try:
-            if progress_bar is not None:
+    Parameters:
+    -----------
+    uploaded_files : list
+        アップロードされた画像ファイルのリスト
+    threshold_method : str
+        閾値処理方法 ("otsu" or "exg")
+    exg_threshold : float
+        ExGの閾値（手動設定時）
+    selected_indices : list
+        選択された植生指数のリスト
+    lang : str
+        表示言語
+    
+    Returns:
+    --------
+    tuple
+        (選択されたROI, 処理結果のリスト)
+    """
+    if not uploaded_files:
+        return None, []
+    
+    # 最初の画像を読み込み
+    first_file = uploaded_files[0]
+    file_bytes = np.frombuffer(first_file.read(), np.uint8)
+    first_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
+    
+    # ROI選択UIの表示
+    st.subheader(get_text("roi_selection", lang))
+    st.image(first_image, caption=get_text("original_image", lang))
+    roi = select_roi(first_image)
+    
+    if not roi:
+        st.warning("ROIが選択されていません。画像全体を処理します。")
+        return None, []
+    
+    # ROIを表示して確認
+    preview_image = first_image.copy()
+    x1, y1, x2, y2 = roi
+    cv2.rectangle(preview_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    st.image(preview_image, caption="選択されたROI")
+    
+    if st.button(get_text("apply_roi", lang)):
+        # 進捗バーの初期化
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        results = []
+        total_files = len(uploaded_files)
+        
+        # バッチ処理の実行
+        for i, file in enumerate(uploaded_files):
+            try:
                 progress = i / total_files
                 progress_bar.progress(progress)
-                status_text.text(f"{get_text('processing', lang)} {file.name} ({i}/{total_files})")
-            
-            file_bytes = np.frombuffer(file.read(), np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            # ROIの適用
-            if roi:
-                image = apply_roi(image, roi)
-            
-            images, pixels, indices, par = process_single_image(
-                image, threshold_method, exg_threshold, selected_indices
-            )
-            
-            # 基本情報
-            result = {
-                get_text("file_name", lang): file.name,
-                get_text("coverage_rate_percent", lang): (pixels['veg'] / pixels['total']) * 100,
-                get_text("veg_pixels", lang): pixels['veg'],
-                get_text("total_pixels", lang): pixels['total'],
-                "PAR": par['value'],
-                get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
-                get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
-            }
-            
-            # 指標値
-            for key in selected_indices:
-                result[f'{ALGORITHMS[key][0]} (Raw)'] = indices['raw'][key]
-                result[f'{ALGORITHMS[key][0]} (Masked)'] = indices['masked'][key]
-            
-            results.append(result)
-            
-        except Exception as e:
-            st.error(f"{get_text('error_occurred', lang)} {str(e)} in file: {file.name}")
-            continue
-            
-    return results
+                status_text.text(f"{get_text('processing', lang)} {file.name} ({i+1}/{total_files})")
+                
+                # ファイルの再読み込み（最初のファイルの場合はシーク位置をリセット）
+                if i == 0:
+                    file.seek(0)
+                
+                # 画像の読み込みと処理
+                file_bytes = np.frombuffer(file.read(), np.uint8)
+                image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                
+                # ROIの適用
+                roi_image = apply_roi(image, roi)
+                
+                # 画像の処理
+                images, pixels, indices, par = process_single_image(
+                    roi_image, threshold_method, exg_threshold, selected_indices
+                )
+                
+                # 結果の保存
+                result = {
+                    get_text("file_name", lang): file.name,
+                    get_text("coverage_rate_percent", lang): (pixels['veg'] / pixels['total']) * 100,
+                    get_text("veg_pixels", lang): pixels['veg'],
+                    get_text("total_pixels", lang): pixels['total'],
+                    "PAR": par['value'],
+                    get_text("threshold_method_col", lang): get_text("otsu_method" if threshold_method == "otsu" else "exg_threshold_method", lang),
+                    get_text("threshold_value", lang): get_text("automatic", lang) if threshold_method == "otsu" else str(exg_threshold)
+                }
+                
+                # 指標値の追加
+                for key in selected_indices:
+                    result[f'{ALGORITHMS[key][0]} (Raw)'] = indices['raw'][key]
+                    result[f'{ALGORITHMS[key][0]} (Masked)'] = indices['masked'][key]
+                
+                results.append(result)
+                
+            except Exception as e:
+                st.error(f"{get_text('error_occurred', lang)} {str(e)} in file: {file.name}")
+                continue
+        
+        progress_bar.progress(1.0)
+        status_text.text(get_text("processing_complete", lang))
+        
+        return roi, results
+    
+    return None, []
 
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
@@ -697,10 +757,6 @@ def main():
                 st.error(f"{get_text('error_occurred', lang)} {str(e)}")
 
     with tab2:  # Batch Processing tab
-        # ROIの警告表示
-        if st.session_state.roi:
-            st.info(get_text("roi_instructions", lang))
-        
         uploaded_files = st.file_uploader(
             get_text("upload_multiple", lang),
             type=["png", "jpg", "jpeg"],
@@ -709,39 +765,27 @@ def main():
         )
         
         if uploaded_files and len(selected_indices) > 0:
-            if st.button(get_text("start_batch", lang), type="primary"):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+            roi, results = batch_process_with_roi(
+                uploaded_files,
+                threshold_method,
+                exg_threshold,
+                selected_indices,
+                lang
+            )
+            
+            if results:
+                # 結果の表示
+                df = pd.DataFrame(results)
+                st.dataframe(df)
                 
-                # バッチ処理実行
-                try:
-                    results = process_batch(
-                        uploaded_files, 
-                        threshold_method, 
-                        exg_threshold, 
-                        selected_indices, 
-                        lang,
-                        roi=st.session_state.roi,
-                        progress_bar=progress_bar,
-                        status_text=status_text
-                    )
-                    
-                    if results:
-                        status_text.text(get_text("processing_complete", lang))
-                        
-                        df = pd.DataFrame(results)
-                        st.dataframe(df)
-                        
-                        csv = df.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button(
-                            get_text("download_csv", lang),
-                            csv,
-                            "vegetation_analysis_results.csv",
-                            "text/csv",
-                            key='download-csv'
-                        )
-                except Exception as e:
-                    st.error(f"Batch processing failed: {str(e)}")
-
+                # CSVダウンロードボタン
+                csv = df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    get_text("download_csv", lang),
+                    csv,
+                    "vegetation_analysis_results.csv",
+                    "text/csv",
+                    key='download-csv'
+                )
 if __name__ == "__main__":
     main()
