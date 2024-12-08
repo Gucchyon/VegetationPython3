@@ -716,25 +716,26 @@ def process_single_image(
     cache_key: str = None  # キャッシュ制御用のキー
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, int], Dict[str, Dict], Dict[str, float]]:
     """ROIを考慮した画像処理関数"""
-    # ROIの適用（必要な場合）
-    if roi is not None:
-        x1, y1, x2, y2 = roi
-        h, w = image.shape[:2]
-        
-        # 範囲チェック
-        x1 = max(0, min(x1, w-1))
-        x2 = max(0, min(x2, w-1))
-        y1 = max(0, min(y1, h-1))
-        y2 = max(0, min(y2, h-1))
-        
-        # 正しい順序を確保
-        x1, x2 = min(x1, x2), max(x1, x2)
-        y1, y2 = min(y1, y2), max(y1, y2)
-        
-        # ROIを適用
-        if x2 > x1 and y2 > y1:
-            image = image[y1:y2, x1:x2].copy()
-    
+    try:
+        # ROIの適用（必要な場合）
+        if roi is not None:
+            x1, y1, x2, y2 = roi
+            h, w = image.shape[:2]
+            
+            # 範囲チェック
+            x1 = max(0, min(x1, w-1))
+            x2 = max(0, min(x2, w-1))
+            y1 = max(0, min(y1, h-1))
+            y2 = max(0, min(y2, h-1))
+            
+            # 正しい順序を確保
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            
+            # ROIを適用
+            if x2 > x1 and y2 > y1:
+                image = image[y1:y2, x1:x2].copy()
+
         # リサイズ
         image = resize_if_needed(image)
         
