@@ -40,6 +40,11 @@ TRANSLATIONS = {
         "automatic": "Automatic",
             "help": "Help",
         "about_title": "About This Application",
+        "roi_selection": "Region of Interest Selection",
+        "select_roi": "Select Region of Interest",
+        "apply_roi": "Apply Selection",
+        "reset_roi": "Reset Selection",
+        "roi_instructions": "Click and drag to select area, then click 'Apply Selection'",
         "about_description": """
         "roi_selection": "Selección de Región de Interés",
 
@@ -116,11 +121,6 @@ TRANSLATIONS = {
         "apply_roi": "Appliquer la Sélection",
         "reset_roi": "Réinitialiser la Sélection",
         "roi_instructions": "Cliquez et faites glisser pour sélectionner la zone, puis cliquez sur 'Appliquer la Sélection'",
-        "roi_selection": "Region of Interest Selection",
-        "select_roi": "Select Region of Interest",
-        "apply_roi": "Apply Selection",
-        "reset_roi": "Reset Selection",
-        "roi_instructions": "Click and drag to select area, then click 'Apply Selection'",
         "about_description": """
         Cette application analyse la végétation dans les images en utilisant divers indices de végétation. Vous pouvez traiter des images uniques ou multiples en mode lot.
         
