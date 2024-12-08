@@ -576,6 +576,31 @@ def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, i
     
     return (x1, y1, x2, y2)
 
+def resize_for_display(image: np.ndarray, max_size: int = 400) -> np.ndarray:
+    """表示用に画像をリサイズ（アスペクト比を維持）"""
+    h, w = image.shape[:2]
+    if max(h, w) > max_size:
+        scale = max_size / max(h, w)
+        new_size = (int(w * scale), int(h * scale))
+        return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+    return image
+
+def display_analysis_images(original: np.ndarray, masked: np.ndarray, edges: np.ndarray, 
+                          lang: str, display_size: int = 400) -> None:
+    """解析結果の画像を統一サイズで表示"""
+    # 表示用にリサイズ
+    original_display = resize_for_display(original, display_size)
+    masked_display = resize_for_display(masked, display_size)
+    edges_display = resize_for_display(edges, display_size)
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.image(original_display, caption=get_text("original_image", lang), use_column_width=True)
+    with col2:
+        st.image(masked_display, caption=get_text("vegetation_result", lang), use_column_width=True)
+    with col3:
+        st.image(edges_display, caption="Edge Detection Result", use_column_width=True)
+
 def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, selected_indices, lang):
     """バッチ処理の実行（最初の画像でROIを指定し、それを他の画像に適用）"""
     if not uploaded_files:
@@ -587,30 +612,35 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
     first_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     first_image = cv2.cvtColor(first_image, cv2.COLOR_BGR2RGB)
     
-    # ROI選択UIの表示
+    # ROI選択UI用の画像表示
+    display_image = resize_for_display(first_image, 600)  # ROI選択用は少し大きめに
     st.subheader(get_text("roi_selection", lang))
-    st.image(first_image, caption=get_text("original_image", lang))
-    roi = select_roi_for_batch(first_image, lang)
+    st.image(display_image, caption=get_text("original_image", lang), use_column_width=True)
+    roi = select_roi_for_batch(display_image, lang)
     
     if not roi:
         st.warning("ROIが選択されていません。画像全体を処理します。")
         return None, []
     
+    # スケール調整したROIを元のサイズに変換
+    h_scale = first_image.shape[0] / display_image.shape[0]
+    w_scale = first_image.shape[1] / display_image.shape[1]
+    original_roi = (
+        int(roi[0] * w_scale),
+        int(roi[1] * h_scale),
+        int(roi[2] * w_scale),
+        int(roi[3] * h_scale)
+    )
+    
     # 1枚目の画像のプレビュー処理
-    roi_image = apply_roi(first_image, roi)
+    roi_image = apply_roi(first_image, original_roi)
     preview_images, preview_pixels, preview_indices, preview_par = process_single_image(
         roi_image, threshold_method, exg_threshold, selected_indices
     )
     
     # プレビュー結果の表示
     st.subheader("処理結果プレビュー（1枚目の画像）")
-    preview_cols = st.columns(3)
-    with preview_cols[0]:
-        st.image(roi_image, caption=get_text("original_image", lang))
-    with preview_cols[1]:
-        st.image(preview_images["masked"], caption=get_text("vegetation_result", lang))
-    with preview_cols[2]:
-        st.image(preview_images["edges"], caption="Edge Detection Result")
+    display_analysis_images(roi_image, preview_images["masked"], preview_images["edges"], lang)
     
     # プレビューの基本指標を表示
     metric_cols = st.columns(3)
@@ -658,7 +688,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
-                roi_image = apply_roi(image, roi)
+                roi_image = apply_roi(image, original_roi)  # 元サイズのROIを使用
                 
                 images, pixels, indices, par = process_single_image(
                     roi_image, threshold_method, exg_threshold, selected_indices
@@ -687,7 +717,7 @@ def batch_process_with_roi(uploaded_files, threshold_method, exg_threshold, sele
         progress_bar.progress(1.0)
         status_text.text(get_text("processing_complete", lang))
         
-        return roi, results
+        return original_roi, results
     
     return None, []
 
@@ -787,6 +817,9 @@ def main():
                 images, pixels, indices, par = process_single_image(
                     working_image, threshold_method, exg_threshold, selected_indices
                 )
+                
+                # 統一された表示関数を使用
+                display_analysis_images(working_image, images["masked"], images["edges"], lang)
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
