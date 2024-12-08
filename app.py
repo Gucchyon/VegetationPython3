@@ -384,44 +384,6 @@ class ROISelector:
             cv2.rectangle(image, (self.roi[0], self.roi[1]), (self.roi[2], self.roi[3]), (0, 255, 0), 2)
             cv2.imshow('ROI Selection', image)
 
-def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
-    """Streamlitを使用してROIを選択する"""
-    h, w = image.shape[:2]
-    
-    # セッション状態の初期化
-    if 'roi_x1' not in st.session_state:
-        st.session_state.roi_x1 = 0
-    if 'roi_y1' not in st.session_state:
-        st.session_state.roi_y1 = 0
-    if 'roi_x2' not in st.session_state:
-        st.session_state.roi_x2 = w-1
-    if 'roi_y2' not in st.session_state:
-        st.session_state.roi_y2 = h-1
-    
-    st.write("ROIの座標を指定してください：")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        x1 = st.slider("左端 (X1)", 0, w-1, st.session_state.roi_x1, key="roi_x1_slider")
-        y1 = st.slider("上端 (Y1)", 0, h-1, st.session_state.roi_y1, key="roi_y1_slider")
-    
-    with col2:
-        x2 = st.slider("右端 (X2)", x1, w-1, st.session_state.roi_x2, key="roi_x2_slider")
-        y2 = st.slider("下端 (Y2)", y1, h-1, st.session_state.roi_y2, key="roi_y2_slider")
-    
-    # セッション状態の更新
-    st.session_state.roi_x1 = x1
-    st.session_state.roi_y1 = y1
-    st.session_state.roi_x2 = x2
-    st.session_state.roi_y2 = y2
-    
-    # ROIを可視化
-    img_copy = image.copy()
-    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
-    st.image(img_copy, caption="選択されたROI", use_column_width=True)
-    
-    return (x1, y1, x2, y2)
-
 def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
     if roi is None:
         return image
@@ -539,29 +501,42 @@ def process_single_image(
 
 def select_roi_interactive(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
     """インタラクティブなROI選択機能"""
-    selector = ROISelector()
-    selector.temp_image = image.copy()
-    window_name = get_text("roi_selection", lang)
+    h, w = image.shape[:2]
     
-    cv2.namedWindow(window_name)
-    cv2.setMouseCallback(window_name, selector.mouse_callback)
-    cv2.imshow(window_name, image)
+    # セッション状態の初期化
+    if 'roi_x1' not in st.session_state:
+        st.session_state.roi_x1 = 0
+    if 'roi_y1' not in st.session_state:
+        st.session_state.roi_y1 = 0
+    if 'roi_x2' not in st.session_state:
+        st.session_state.roi_x2 = w-1
+    if 'roi_y2' not in st.session_state:
+        st.session_state.roi_y2 = h-1
     
-    instructions = get_text("roi_instructions", lang)
-    st.write(instructions)
+    # スライダーによる選択
+    st.write(get_text("roi_instructions", lang))
+    col1, col2 = st.columns(2)
     
-    while True:
-        key = cv2.waitKey(1) & 0xFF
-        if key == 13:  # Enterキーで確定
-            cv2.destroyAllWindows()
-            if selector.roi:
-                return selector.roi
-            break
-        elif key == 27:  # ESCキーでキャンセル
-            cv2.destroyAllWindows()
-            return None
+    with col1:
+        x1 = st.slider(get_text("roi_left", lang), 0, w-1, st.session_state.roi_x1, key="roi_x1_slider")
+        y1 = st.slider(get_text("roi_top", lang), 0, h-1, st.session_state.roi_y1, key="roi_y1_slider")
     
-    return None
+    with col2:
+        x2 = st.slider(get_text("roi_right", lang), x1, w-1, st.session_state.roi_x2, key="roi_x2_slider")
+        y2 = st.slider(get_text("roi_bottom", lang), y1, h-1, st.session_state.roi_y2, key="roi_y2_slider")
+    
+    # セッション状態の更新
+    st.session_state.roi_x1 = x1
+    st.session_state.roi_y1 = y1
+    st.session_state.roi_x2 = x2
+    st.session_state.roi_y2 = y2
+    
+    # ROIを可視化
+    img_copy = image.copy()
+    cv2.rectangle(img_copy, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    st.image(img_copy, caption=get_text("roi_selection", lang), use_column_width=True)
+    
+    return (x1, y1, x2, y2)
 
 def select_roi_for_batch(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
     """バッチ処理用のROI選択関数"""
@@ -751,41 +726,19 @@ def main():
                 
                 with roi_container:
                     st.subheader(get_text("roi_selection", lang))
-                    roi_col1, roi_col2, roi_col3 = st.columns(3)
+                    roi_col1, roi_col2 = st.columns(2)
                     
                     with roi_col1:
-                        if st.button(get_text("select_roi", lang), key='select_roi_btn'):
-                            # インタラクティブROI選択の起動
+                        if st.checkbox(get_text("select_roi", lang), key='select_roi_btn'):
                             st.session_state.roi = select_roi_interactive(image, lang)
                     
                     with roi_col2:
                         if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
                             st.session_state.roi = None
-                    
-                    with roi_col3:
-                        # スライダーによる微調整機能の追加
-                        if st.checkbox(get_text("roi_coords", lang), key='show_roi_coords'):
-                            if st.session_state.roi:
-                                x1, y1, x2, y2 = st.session_state.roi
-                                h, w = image.shape[:2]
-                                
-                                x1 = st.slider(get_text("roi_left", lang), 0, w-1, x1)
-                                y1 = st.slider(get_text("roi_top", lang), 0, h-1, y1)
-                                x2 = st.slider(get_text("roi_right", lang), x1, w-1, x2)
-                                y2 = st.slider(get_text("roi_bottom", lang), y1, h-1, y2)
-                                
-                                st.session_state.roi = (x1, y1, x2, y2)
-                
-                # ROIのプレビューと処理
-                if st.session_state.roi:
-                    preview_img = image.copy()
-                    x1, y1, x2, y2 = st.session_state.roi
-                    cv2.rectangle(preview_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    st.image(preview_img, caption=get_text("roi_selection", lang))
-                
-                # ROI選択モードがアクティブな場合のみROI選択UIを表示
-                if 'roi_selection_active' in st.session_state and st.session_state.roi_selection_active:
-                    st.session_state.roi = select_roi(image)
+                            st.session_state.roi_x1 = None
+                            st.session_state.roi_y1 = None
+                            st.session_state.roi_x2 = None
+                            st.session_state.roi_y2 = None
                 
                 # ROIの適用と処理
                 working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
