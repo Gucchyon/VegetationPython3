@@ -75,7 +75,72 @@ TRANSLATIONS = {
         - Use Otsu's method first, then switch to manual threshold if needed
         - Higher PAR values indicate thinner leaf structure or smaller leaves
         - Masked values are useful when background (soil, water) might affect the analysis
-        """,    
+        """,
+    },
+    "fr": {
+        "app_title": "Application d'Analyse de la Végétation",
+        "analysis_settings": "Paramètres d'Analyse",
+        "threshold_method": "Méthode de Seuillage",
+        "otsu_method": "Méthode d'Otsu (Automatique)",
+        "exg_threshold_method": "Seuil ExG",
+        "exg_threshold_value": "Valeur du Seuil ExG",
+        "vegetation_indices": "Indices de Végétation",
+        "single_image": "Analyse d'Image Unique",
+        "batch_processing": "Traitement par Lots",
+        "upload_image": "Télécharger une Image",
+        "upload_multiple": "Télécharger Plusieurs Images",
+        "original_image": "Image Originale",
+        "vegetation_result": "Résultat d'Extraction de la Végétation",
+        "coverage_rate": "Taux de Couverture Végétale",
+        "veg_pixels": "Pixels de Végétation",
+        "total_pixels": "Pixels Totaux",
+        "index_results": "Résultats des Indices de Végétation",
+        "veg_area_values": "Valeurs pour la Zone de Végétation:",
+        "whole_area_values": "Valeurs pour l'Image Entière:",
+        "error_occurred": "Une erreur s'est produite: ",
+        "start_batch": "Démarrer le Traitement par Lots",
+        "processing": "Traitement en cours: ",
+        "processing_complete": "Traitement Terminé!",
+        "download_csv": "Télécharger le Fichier CSV",
+        "file_name": "Nom du Fichier",
+        "coverage_rate_percent": "Taux de Couverture Végétale (%)",
+        "threshold_method_col": "Méthode de Seuillage",
+        "threshold_value": "Valeur du Seuil",
+        "automatic": "Automatique",
+        "help": "Aide",
+        "about_title": "À Propos de cette Application",
+        "roi_selection": "Sélection de la Zone d'Intérêt",
+        "select_roi": "Sélectionner la Zone d'Intérêt",
+        "apply_roi": "Appliquer la Sélection",
+        "reset_roi": "Réinitialiser la Sélection",
+        "roi_instructions": "Cliquez et faites glisser pour sélectionner la zone, puis cliquez sur 'Appliquer la Sélection'",
+        "about_description": """
+        Cette application analyse la végétation dans les images en utilisant divers indices de végétation. Vous pouvez traiter des images uniques ou multiples en mode lot.
+        
+        **Caractéristiques Principales:**
+        - Extraction de la végétation utilisant l'Indice d'Excès de Vert (ExG) avec seuillage automatique (Otsu) ou manuel
+        - Plusieurs modes de calcul:
+          - Valeurs brutes: Calculées à partir de l'image originale
+          - Valeurs masquées: Réduit l'influence du sol et de l'eau en arrière-plan
+        - Détection des bords et calcul du ratio périmètre/surface (PAR)
+        - Support du traitement par lots
+        - Résultats détaillés avec export CSV
+        
+        **Comment Utiliser:**
+        1. **Paramètres d'Analyse (Barre Latérale)**
+           - Sélectionnez la méthode de seuillage ExG
+           - Choisissez les indices de végétation à calculer
+        
+        2. **Analyse d'Image Unique**
+           - Téléchargez une image
+           - Sélectionnez la zone d'intérêt si nécessaire
+           - Visualisez les résultats
+        
+        3. **Traitement par Lots**
+           - Téléchargez plusieurs images
+           - La zone d'intérêt sélectionnée sera appliquée à toutes les images
+           - Téléchargez les résultats en CSV
+        """
     },
     "es": {
         "app_title": "Aplicación de Análisis de Vegetación",
@@ -254,8 +319,13 @@ def process_single_image(
     image: np.ndarray,
     threshold_method: str,
     exg_threshold: float,
-    selected_indices: List[str]
+    selected_indices: List[str],
+    roi: Tuple[int, int, int, int] = None
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, int], Dict[str, Dict], Dict[str, float]]:
+    # ROIの適用
+    if roi:
+        image = apply_roi(image, roi)
+    
     # リサイズ
     image = resize_if_needed(image)
     
@@ -337,7 +407,7 @@ def process_single_image(
     
     return images, pixels, indices_result, par
 
-def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang, progress_bar=None, status_text=None):
+def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang, roi=None, progress_bar=None, status_text=None):
     results = []
     total_files = len(uploaded_files)
     
@@ -351,6 +421,10 @@ def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indi
             file_bytes = np.frombuffer(file.read(), np.uint8)
             image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # ROIの適用
+            if roi:
+                image = apply_roi(image, roi)
             
             images, pixels, indices, par = process_single_image(
                 image, threshold_method, exg_threshold, selected_indices
@@ -380,16 +454,78 @@ def process_batch(uploaded_files, threshold_method, exg_threshold, selected_indi
             
     return results
 
+class ROISelector:
+    def __init__(self):
+        self.roi = None
+        self.drawing = False
+        self.start_point = None
+        self.end_point = None
+
+    def mouse_callback(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawing = True
+            self.start_point = (x, y)
+            self.end_point = (x, y)
+        elif event == cv2.EVENT_MOUSEMOVE and self.drawing:
+            self.end_point = (x, y)
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.drawing = False
+            self.roi = (
+                min(self.start_point[0], self.end_point[0]),
+                min(self.start_point[1], self.end_point[1]),
+                max(self.start_point[0], self.end_point[0]),
+                max(self.start_point[1], self.end_point[1])
+            )
+
+def select_roi(image: np.ndarray) -> Tuple[int, int, int, int]:
+    selector = ROISelector()
+    window_name = "Select ROI"
+    cv2.namedWindow(window_name)
+    cv2.setMouseCallback(window_name, selector.mouse_callback)
+
+    while True:
+        img_copy = image.copy()
+        if selector.start_point and selector.end_point:
+            cv2.rectangle(img_copy, selector.start_point, selector.end_point, (0, 255, 0), 2)
+        
+        cv2.imshow(window_name, img_copy)
+        key = cv2.waitKey(1) & 0xFF
+        
+        if key == ord('q') or key == 27:  # ESC
+            break
+        elif key == ord('r'):  # Reset
+            selector.roi = None
+            selector.start_point = None
+            selector.end_point = None
+    
+    cv2.destroyAllWindows()
+    return selector.roi
+
+def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
+    if roi is None:
+        return image
+    x1, y1, x2, y2 = roi
+    return image[y1:y2, x1:x2]
+
 def main():
     st.set_page_config(page_title="Vegetation Analysis", layout="wide")
     
     # 言語選択
     lang = st.sidebar.selectbox(
-        "Language / Idioma / 言語",
-        ["en", "es", "ja"],
-        format_func=lambda x: {"en": "English", "es": "Español", "ja": "日本語"}[x]
+        "Language / Idioma / 言語 / Langue",
+        ["en", "es", "ja", "fr"],
+        format_func=lambda x: {
+            "en": "English", 
+            "es": "Español", 
+            "ja": "日本語",
+            "fr": "Français"
+        }[x]
     )
-    
+
+    # ROI選択のための状態管理
+    if 'roi' not in st.session_state:
+        st.session_state.roi = None
+
     st.title(get_text("app_title", lang))
     
     # ヘルプボタンを追加
@@ -440,8 +576,22 @@ def main():
                 image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
+                # ROI選択機能
+                st.subheader(get_text("roi_selection", lang))
+                roi_col1, roi_col2 = st.columns(2)
+                
+                with roi_col1:
+                    if st.button(get_text("select_roi", lang)):
+                        st.session_state.roi = select_roi(image)
+                
+                with roi_col2:
+                    if st.button(get_text("reset_roi", lang)):
+                        st.session_state.roi = None
+                
+                # ROIの適用と処理
+                working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
                 images, pixels, indices, par = process_single_image(
-                    image, threshold_method, exg_threshold, selected_indices
+                    working_image, threshold_method, exg_threshold, selected_indices
                 )
                 
                 col1, col2, col3 = st.columns(3)
@@ -477,6 +627,10 @@ def main():
                 st.error(f"{get_text('error_occurred', lang)} {str(e)}")
 
     with tab2:
+        # ROIの警告表示
+        if st.session_state.roi:
+            st.info(get_text("roi_instructions", lang))
+        
         uploaded_files = st.file_uploader(
             get_text("upload_multiple", lang),
             type=["png", "jpg", "jpeg"],
@@ -491,7 +645,16 @@ def main():
                 
                 # バッチ処理実行
                 try:
-                    results = process_batch(uploaded_files, threshold_method, exg_threshold, selected_indices, lang)
+                    results = process_batch(
+                        uploaded_files, 
+                        threshold_method, 
+                        exg_threshold, 
+                        selected_indices, 
+                        lang,
+                        roi=st.session_state.roi,
+                        progress_bar=progress_bar,
+                        status_text=status_text
+                    )
                     
                     if results:
                         status_text.text(get_text("processing_complete", lang))
