@@ -482,16 +482,151 @@ def convert_image_to_base64(image):
     return None
 
 def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, int, int]:
-    """Improved interactive ROI selection function"""
+    """インタラクティブなROI選択機能の改善版"""
     img_base64 = convert_image_to_base64(image)
     
     if 'roi_coords' not in st.session_state:
         st.session_state.roi_coords = None
+
+    # ROI選択用コンポーネントの作成
+    components.html(
+        f"""
+        <style>
+            .roi-container {{
+                position: relative;
+                display: inline-block;
+                max-width: 100%;
+            }}
+            .roi-box {{
+                position: absolute;
+                border: 2px solid #00ff00;
+                cursor: move;
+                background-color: rgba(0, 255, 0, 0.1);
+            }}
+            .roi-resize-handle {{
+                width: 10px;
+                height: 10px;
+                background-color: #00ff00;
+                position: absolute;
+                right: -5px;
+                bottom: -5px;
+                cursor: se-resize;
+            }}
+        </style>
+
+        <div class="roi-container" id="roiContainer">
+            <img id="sourceImage" src="data:image/png;base64,{img_base64}" style="max-width: 100%;" />
+            <div class="roi-box" id="roiBox">
+                <div class="roi-resize-handle" id="roiHandle"></div>
+            </div>
+        </div>
+
+        <script>
+            let isDragging = false;
+            let isResizing = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+            let initialWidth;
+            let initialHeight;
+
+            const container = document.getElementById("roiContainer");
+            const roiBox = document.getElementById("roiBox");
+            const handle = document.getElementById("roiHandle");
+            const img = document.getElementById("sourceImage");
+
+            // 初期サイズを設定
+            roiBox.style.width = '100px';
+            roiBox.style.height = '100px';
+
+            roiBox.addEventListener("mousedown", startDragging);
+            handle.addEventListener("mousedown", startResizing);
+            document.addEventListener("mousemove", drag);
+            document.addEventListener("mouseup", stopDragging);
+
+            function startDragging(e) {{
+                if (e.target === handle) return;
+                isDragging = true;
+                initialX = e.clientX - xOffset;
+                initialY = e.clientY - yOffset;
+            }}
+
+            function startResizing(e) {{
+                isResizing = true;
+                initialWidth = roiBox.offsetWidth;
+                initialHeight = roiBox.offsetHeight;
+                initialX = e.clientX;
+                initialY = e.clientY;
+                e.stopPropagation();
+            }}
+
+            function drag(e) {{
+                if (isDragging) {{
+                    e.preventDefault();
+                    currentX = e.clientX - initialX;
+                    currentY = e.clientY - initialY;
+
+                    // 境界チェック
+                    const containerRect = container.getBoundingClientRect();
+                    const boxRect = roiBox.getBoundingClientRect();
+                    
+                    currentX = Math.max(0, Math.min(currentX, containerRect.width - boxRect.width));
+                    currentY = Math.max(0, Math.min(currentY, containerRect.height - boxRect.height));
+
+                    xOffset = currentX;
+                    yOffset = currentY;
+
+                    setTranslate(currentX, currentY, roiBox);
+                }} else if (isResizing) {{
+                    e.preventDefault();
+                    const width = Math.max(50, initialWidth + (e.clientX - initialX));
+                    const height = Math.max(50, initialHeight + (e.clientY - initialY));
+
+                    // 境界チェック
+                    const containerRect = container.getBoundingClientRect();
+                    const boxRect = roiBox.getBoundingClientRect();
+                    
+                    const maxWidth = containerRect.width - boxRect.left + containerRect.left;
+                    const maxHeight = containerRect.height - boxRect.top + containerRect.top;
+
+                    roiBox.style.width = `${{Math.min(width, maxWidth)}}px`;
+                    roiBox.style.height = `${{Math.min(height, maxHeight)}}px`;
+                }}
+            }}
+
+            function stopDragging() {{
+                if (isDragging || isResizing) {{
+                    isDragging = false;
+                    isResizing = false;
+                    
+                    const rect = roiBox.getBoundingClientRect();
+                    const imgRect = img.getBoundingClientRect();
+                    
+                    // 正規化された座標を計算
+                    const roi = {{
+                        x: (rect.left - imgRect.left) / imgRect.width,
+                        y: (rect.top - imgRect.top) / imgRect.height,
+                        width: rect.width / imgRect.width,
+                        height: rect.height / imgRect.height
+                    }};
+
+                    // Streamlitに値を送信
+                    window.Streamlit.setComponentValue(roi);
+                }}
+            }}
+
+            function setTranslate(xPos, yPos, el) {{
+                el.style.transform = `translate3d(${{xPos}}px, ${{yPos}}px, 0)`;
+            }}
+        </script>
+        """,
+        height=600
+    )
     
-    # Create the component without a key argument
-    create_interactive_roi_selector(img_base64)
-    
-    # Get ROI values
+    # ROIの値を取得
     roi_data = st.session_state.get('roi_coords')
     if roi_data:
         h, w = image.shape[:2]
@@ -507,6 +642,7 @@ def interactive_roi_selection(image: np.ndarray, lang: str) -> Tuple[int, int, i
     return None
 
 def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
+    """ROIを画像に適用する"""
     if roi is None:
         return image
     
@@ -523,9 +659,14 @@ def apply_roi(image: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
         x1, x2 = min(x1, x2), max(x1, x2)
         y1, y2 = min(y1, y2), max(y1, y2)
         
-        return image[y1:y2, x1:x2]
+        # ROIのサイズが有効かチェック
+        if x2 <= x1 or y2 <= y1:
+            return image
+            
+        # ROIを適用して新しい画像を返す
+        return image[y1:y2, x1:x2].copy()
     except Exception as e:
-        st.error(f"Failed to apply ROI: {str(e)}")
+        st.error(f"ROIの適用に失敗しました: {str(e)}")
         return image
 
 @st.cache_data(max_entries=10)
@@ -771,14 +912,37 @@ def main():
                 
                 with roi_container:
                     st.subheader(get_text("roi_selection", lang))
-                    if st.checkbox(get_text("select_roi", lang), key='enable_roi'):
-                        st.session_state.roi = interactive_roi_selection(image, lang)
                     
-                    if st.button(get_text("reset_roi", lang), key='reset_roi_btn'):
+                    # ROI選択の有効化チェックボックス
+                    enable_roi = st.checkbox(get_text("select_roi", lang), key='enable_roi')
+                    
+                    if enable_roi:
+                        # ROI選択UIの表示
+                        roi = interactive_roi_selection(image, lang)
+                        if roi:
+                            st.session_state.roi = roi
+                            # ROIの座標を表示
+                            st.write(get_text("roi_coords", lang) + ":")
+                            cols = st.columns(4)
+                            with cols[0]:
+                                st.write(f"{get_text('roi_left', lang)}: {roi[0]}")
+                            with cols[1]:
+                                st.write(f"{get_text('roi_top', lang)}: {roi[1]}")
+                            with cols[2]:
+                                st.write(f"{get_text('roi_right', lang)}: {roi[2]}")
+                            with cols[3]:
+                                st.write(f"{get_text('roi_bottom', lang)}: {roi[3]}")
+                    
+                    # ROIリセットボタン
+                    if st.button(get_text("reset_roi", lang)):
                         st.session_state.roi = None
                         st.session_state.roi_coords = None
+                        st.rerun()
+                
                 # ROIの適用と処理
                 working_image = apply_roi(image, st.session_state.roi) if st.session_state.roi else image
+                
+                # 処理結果の表示
                 images, pixels, indices, par = process_single_image(
                     working_image, threshold_method, exg_threshold, selected_indices
                 )
